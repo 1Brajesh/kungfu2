@@ -31,8 +31,12 @@ export function take(...codes) {
   return hit;
 }
 
-/** Player 1 intent: dir is world direction (-1 left, +1 right). */
+/** Player 1 intent: dir is world direction (-1 left, +1 right); presses are true once. */
 export function readP1() {
   const dir = (isDown("KeyD", "ArrowRight") ? 1 : 0) - (isDown("KeyA", "ArrowLeft") ? 1 : 0);
-  return { dir, speed: 1, punch: take("KeyJ") };
+  return {
+    dir, speed: 1,
+    crouch: isDown("KeyS", "ArrowDown"), block: isDown("KeyI"),
+    punch: take("KeyJ"), kick: take("KeyK"), heavy: take("KeyL"), jump: take("KeyW", "ArrowUp"), roll: take("KeyU"),
+  };
 }

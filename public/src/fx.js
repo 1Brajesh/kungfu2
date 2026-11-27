@@ -4,15 +4,21 @@ import { circlePath, lineXY } from "./draw.js";
 
 let parts = [];
 
+const WORDS = { block: "BLOCK!", break: "BREAK!", kd: "WHAM!", ko: "BAM!" };
+
+/** kind: hit, block, break, kd or ko (from applyHit). */
 export function spawnHit(x, y, pow, kind = "hit") {
   const blk = kind === "block";
-  parts.push({ t: "star", x, y, life: 0.24, max: 0.24, r: 28 * pow, blk });
-  parts.push({ t: "word", x: x + 18, y: y - 50, life: 0.7, max: 0.7, text: blk ? "BLOCK!" : pow >= 2 ? "WHAM!" : "POW!", blk });
-  for (let i = 0; i < 8; i++) {
+  const text = WORDS[kind] || (pow >= 1.5 ? "WHAM!" : "POW!");
+  parts.push({ t: "star", x, y, life: 0.24, max: 0.24, r: 28 * Math.min(pow, 2), blk });
+  parts.push({ t: "word", x: x + 18, y: y - 50, life: 0.7, max: 0.7, text, blk, brk: kind === "break" });
+  for (let i = 0; i < (blk ? 5 : 8 + Math.round(pow * 2)); i++) {
     const a = (Math.random() - 0.5) * 2.6, sp = 200 + Math.random() * 350;
     parts.push({ t: "bit", x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 150, life: 0.35, max: 0.35, r: 2 + Math.random() * 3 });
   }
 }
+
+export const clearFx = () => { parts = []; };
 
 export function updateFx(dt) {
   for (const p of parts) {
@@ -47,7 +53,7 @@ export function drawFx(g) {
       g.font = '900 34px "Arial Black", Impact, system-ui, sans-serif';
       g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
       g.lineWidth = 7; g.strokeStyle = OUT; g.strokeText(p.text, 0, 0);
-      g.fillStyle = p.blk ? "#a6e1ff" : "#ffd93b"; g.fillText(p.text, 0, 0);
+      g.fillStyle = p.blk ? "#a6e1ff" : p.brk ? "#ff8a3d" : "#ffd93b"; g.fillText(p.text, 0, 0);
       g.restore();
     } else if (p.t === "bit") {
       g.fillStyle = OUT; circlePath(g, [p.x, p.y], p.r + 1.5); g.fill();

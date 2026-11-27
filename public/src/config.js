@@ -15,7 +15,7 @@ export const PAL = {
 
 export const STAGE = { left: 70, right: 890 };
 /** Closest the two fighters' hips can get, in px. */
-export const MIN_GAP = 130;
+export const MIN_GAP = 120;
 export const WALK_FWD = 150, WALK_BACK = 120, ACCEL = 1400;
 
 export const params = new URLSearchParams(location.search);

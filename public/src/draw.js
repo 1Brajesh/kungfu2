@@ -1,6 +1,6 @@
 // Draws fighters in the cartoon style, plus the skeleton view.
 import { L, PI, OUT, LIGHT, SC, GROUND } from "./config.js";
-import { toWorld, bodyCapsule } from "./fighter.js";
+import { toWorld, hurtShapes, LIMB, strikeRadius } from "./fighter.js";
 
 export const circlePath = (g, c, r) => { g.beginPath(); g.arc(c[0], c[1], r, 0, PI * 2); };
 export function lineXY(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
@@ -80,7 +80,9 @@ function torsoDetails(g, s, pal) {
 }
 
 function drawHead(g, s, p, light) {
-  const hx = s.head[0], hy = s.head[1], R = L.headR;
+  const R = L.headR, hx = 0, hy = 0;
+  g.save();
+  g.translate(s.head[0], s.head[1]); g.rotate(s.headRot);
   g.fillStyle = OUT;
   circlePath(g, [hx, hy], R + 1.6); g.fill();
   circlePath(g, [hx - 5, hy - R], 6); g.fill();
@@ -101,6 +103,7 @@ function drawHead(g, s, p, light) {
   g.strokeStyle = OUT; g.lineWidth = 1.3; g.lineCap = "round";
   lineXY(g, hx + 3.6, hy - 3.4, hx + 8.8, hy - 2.6);
   lineXY(g, hx + 6.5, hy + 5.4, hx + 9, hy + 5);
+  g.restore();
 }
 
 export function drawFighter(g, f) {
@@ -125,26 +128,50 @@ export function drawRibbons(g, f) {
   }
 }
 
+/** Ground shadow under the body; wider when lying down, smaller when high in the air. */
 export function drawShadow(g, f) {
+  const s = f.sol;
+  let lo = Infinity, hi = -Infinity;
+  for (const pt of [s.hip, s.head, s.lF.toe, s.lB.toe, s.lF.knee, s.lB.knee]) { const x = toWorld(f, pt)[0]; lo = Math.min(lo, x); hi = Math.max(hi, x); }
+  const k = Math.max(0.35, 1 - f.y / 220), cx = (lo + hi) / 2, rx = Math.max(42, (hi - lo) / 2 + 14) * k;
   g.fillStyle = "rgba(90,60,30,0.25)";
-  g.beginPath(); g.ellipse(f.x, GROUND + 4, 42, 7, 0, 0, PI * 2); g.fill();
+  g.beginPath(); g.ellipse(cx, GROUND + 4, rx, 7 * k, 0, 0, PI * 2); g.fill();
 }
 
-/** Skeleton view: bones, joints, the body capsule (blue), the fist (red, bright while it can hit) and where each foot is planted (yellow). */
+/** Little stars circling the head after the guard is broken. */
+export function drawDizzy(g, f, wt) {
+  if (!f.move || f.move.name !== "stagger") return;
+  const h = toWorld(f, f.sol.head);
+  for (let i = 0; i < 3; i++) {
+    const a = wt * 5 + (i * 2 * PI) / 3, x = h[0] + Math.cos(a) * 26, y = h[1] - 30 + Math.sin(a) * 7;
+    g.save(); g.translate(x, y); g.rotate(a);
+    g.beginPath();
+    for (let j = 0; j < 10; j++) { const r = j % 2 ? 3 : 7.5, b = (j * PI) / 5; g.lineTo(Math.cos(b) * r, Math.sin(b) * r); }
+    g.closePath(); g.fillStyle = "#ffe14d"; g.fill(); g.strokeStyle = OUT; g.lineWidth = 1.8; g.stroke();
+    g.restore();
+  }
+}
+
+/** Skeleton view: bones, joints, the parts that can be hit (blue), the striking point (red) and where each foot is planted (yellow). */
 export function drawRig(g, f) {
   const s = f.sol, w = (p) => toWorld(f, p);
-  g.lineCap = "round";
+  g.lineCap = "round"; g.lineWidth = 2;
   const bones = [[s.hip, s.shoulder], [s.shoulder, s.head], [s.shoulder, s.aF.el], [s.aF.el, s.aF.wr], [s.shoulder, s.aB.el], [s.aB.el, s.aB.wr],
     [s.hip, s.lF.knee], [s.lF.knee, s.lF.an], [s.lF.an, s.lF.toe], [s.hip, s.lB.knee], [s.lB.knee, s.lB.an], [s.lB.an, s.lB.toe]];
-  g.strokeStyle = "#39ff88"; g.lineWidth = 2;
+  g.strokeStyle = "#39ff88";
   for (const [a, b] of bones) { const p = w(a), q = w(b); lineXY(g, p[0], p[1], q[0], q[1]); }
   g.fillStyle = "#39ff88";
   for (const j of [s.hip, s.shoulder, s.head, s.aF.el, s.aF.wr, s.aB.el, s.aB.wr, s.lF.knee, s.lF.an, s.lB.knee, s.lB.an]) { circlePath(g, w(j), 3); g.fill(); }
-  const c = bodyCapsule(f);
-  g.strokeStyle = "rgba(80,200,255,0.95)"; taperPath(g, c.a, c.b, c.r, c.r); g.stroke();
-  const fist = w(s.aF.wr);
-  g.strokeStyle = f.move && f.move.active && f.mt >= f.move.active[0] && f.mt <= f.move.active[1] ? "#ff3355" : "rgba(255,51,85,0.45)";
-  g.lineWidth = 2.5; circlePath(g, fist, SC * 4.6); g.stroke();
+  const inv = f.move && f.move.inv && f.mt >= f.move.inv[0] && f.mt <= f.move.inv[1];
+  g.strokeStyle = inv ? "rgba(255,255,255,0.5)" : "rgba(80,200,255,0.9)"; g.lineWidth = 1.5;
+  for (const h of hurtShapes(f)) { taperPath(g, h.a, h.b, h.r, h.r); g.stroke(); }
+  const m = f.move;
+  if (m && m.limb) {
+    const live = m.active && f.mt >= m.active[0] && f.mt <= m.active[1];
+    const pt = w(LIMB[m.limb](s));
+    g.strokeStyle = live ? "#ff3355" : "rgba(255,51,85,0.45)"; g.lineWidth = 2.5;
+    circlePath(g, pt, strikeRadius(m.limb)); g.stroke();
+  }
   g.fillStyle = "#ffd23a";
-  for (const ft of f.feet) { g.fillRect(ft.x - 2, GROUND + 8, 4, 8); }
+  for (const ft of f.feet) g.fillRect(ft.x - 2, GROUND + 8, 4, 8);
 }

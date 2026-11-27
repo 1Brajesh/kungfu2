@@ -1,0 +1,5 @@
+html, body { margin: 0; height: 100%; background: #17121d; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; }
+canvas { display: block; background: #000; touch-action: none; }
+canvas:focus { outline: none; }
+#nojs { position: fixed; left: 16px; right: 16px; top: 40%; margin: 0; text-align: center; color: #fff8ec; font: 16px/1.5 system-ui, sans-serif; }

@@ -1,0 +1,7 @@
+name = "kungfu2"
+compatibility_date = "2025-02-14"
+workers_dev = true
+routes = [{ pattern = "kungfu2.brajesh.com", custom_domain = true }]
+
+[assets]
+directory = "./public"

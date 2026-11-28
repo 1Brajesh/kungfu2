@@ -46,7 +46,8 @@ function applyVolumes() {
 
 /** Starts the audio after the first click, tap or key press (browsers require one). */
 export function unlock() {
-  if (!AC || unlocked) return;
+  if (!AC) return;
+  if (unlocked) { heal(); return; }
   unlocked = true;
   if (!ctx) build();
   ctx.resume?.();
@@ -58,7 +59,18 @@ export function unlock() {
     musicEl.preservesPitch = false; musicEl.mozPreservesPitch = false; musicEl.webkitPreservesPitch = false; // slow motion drops the pitch like tape
     try { ctx.createMediaElementSource(musicEl).connect(musicFilter); } catch { /* plays unfiltered */ }
   }
-  musicEl.play().then(() => { if (LOG) (window.__sounds ||= []).push("music"); }).catch(() => { unlocked = false; });
+  musicEl.play().then(() => { if (LOG) (window.__sounds ||= []).push("music"); }).catch(() => { /* tried again on the next click or key */ });
+}
+
+/**
+ * Gets the sound going again if something stopped it: the Mac or phone suspending web audio
+ * (headphones plugged in, another app taking the speakers, sleep) or the music being paused.
+ */
+let healT = 0;
+function heal() {
+  if (!ctx || document.hidden) return;
+  if (ctx.state !== "running") ctx.resume?.().catch?.(() => {});
+  if (musicEl && musicEl.paused) musicEl.play().catch(() => {});
 }
 
 /**
@@ -92,6 +104,7 @@ export function duck(depth = 0.5, dur = 0.25) { duckT = Math.max(duckT, dur); mu
  */
 export function audioTick(dt, slow, mood) {
   if (!ctx || !unlocked) return;
+  if ((healT -= dt) <= 0) { healT = 1; heal(); }
   speed = slow;
   const t = ctx.currentTime;
   // slow motion: everything drops in pitch and loses its top end, coming back as the game speeds up
@@ -117,3 +130,14 @@ document.addEventListener("visibilitychange", () => {
   if (!ctx || !unlocked) return;
   if (document.hidden) { ctx.suspend?.(); musicEl?.pause(); } else { ctx.resume?.(); musicEl?.play().catch(() => {}); }
 });
+
+/** For testing: what the audio engine is doing right now. */
+export function audioState() {
+  if (!ctx) return { ctx: null, unlocked };
+  return {
+    state: ctx.state, unlocked, muted: vol.muted, speed, live: live.size, buffers: Object.keys(buffers).length,
+    slowHz: Math.round(slowFilter.frequency.value), musicHz: Math.round(musicFilter.frequency.value),
+    master: master.gain.value, sfxBus: sfxBus.gain.value, musicBus: +musicBus.gain.value.toFixed(3),
+    music: musicEl ? { paused: musicEl.paused, rate: musicEl.playbackRate, t: Math.round(musicEl.currentTime) } : null,
+  };
+}

@@ -56,7 +56,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Roll (through the opponent if you hold toward them, otherwise away) | U |
 | Flying kick / down smash (in the air) | K / J |
 | Pause menu (resume, restart, sound, main menu) | Esc or P |
-| Sound on/off | M |
+| Sound on/off (title and menus only: in a fight M is too close to J and K) | M |
 | *Practice only:* change what the opponent does (stand, block, crouch, jump, CPU) | T |
 | *Practice only:* CPU level Easy / Normal / Hard | 1 / 2 / 3 |
 | *Practice only:* change stage | B |
@@ -129,7 +129,7 @@ The sounds (ElevenLabs) and the music, "Bamboo Grove Duel" (Suno), come from the
 - **Music:** soft and muffled on the title, full in a fight, muffled further when paused, and dipped for a moment under big hits.
 - **K.O. slow motion:** after the impact freeze, every sound and the music drop in pitch and lose their top end, then come back as the game speeds up.
 - **Menus:** a tick when the selection or a setting changes and a thump when something is chosen.
-- **Settings:** SOUND in the title and pause menus has Music and Sound effects volume (0–10, remembered); M mutes everything. Browsers stay silent until the first click, tap or key press, which is when the audio starts.
+- **Settings:** SOUND in the title and pause menus has Music and Sound effects volume (0–10, remembered); M mutes everything (on the title and in menus only), with a big SOUND ON / SOUND OFF banner. Browsers stay silent until the first click, tap or key press, which is when the audio starts. If the computer or phone suspends web audio later (headphones, another app, sleep), the game restarts it within a second, and on any click or key press.
 - *Pass 2:* stage ambience tied to the scenery (birds, bamboo wind, crickets, firework pops) and round sounds (gong, drum). *Pass 3:* music that changes with the fight, a track per stage, and maybe an announcer and fighter shouts.
 
 ## Risks

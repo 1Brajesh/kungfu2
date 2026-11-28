@@ -346,14 +346,16 @@ function render() {
 }
 
 // --- the loop ---
-let acc = 0, last = performance.now(), errShown = false;
+let acc = 0, last = performance.now(), errShown = false, soundToast = 0;
 function frame(now) {
   requestAnimationFrame(frame); // schedule first so one bad frame can't stop the game
   try {
     let fdt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (take("KeyO")) slow = !slow;
-    if (take("KeyM")) toggleMute();
+    // M only works on the title and in menus: in a fight it sits too close to J and K
+    if ((scene === "title" || menu) && take("KeyM")) { toggleMute(); soundToast = 1.6; }
+    soundToast = Math.max(0, soundToast - Math.min(0.1, (now - (frame.prev || now)) / 1000));
     if (take("Backquote")) showRig = !showRig;
     if (showControls) { if (anyPressed()) showControls = false; }
     else if (menu) {
@@ -374,6 +376,11 @@ function frame(now) {
     acc += slow ? fdt * 0.25 : fdt;
     while (acc >= DT) { step(DT); acc -= DT; }
     render();
+    if (soundToast > 0) {
+      g.globalAlpha = Math.min(1, soundToast * 3);
+      drawText(g, isMuted() ? "SOUND OFF" : "SOUND ON", W / 2, H - 70, 30, isMuted() ? "#ff8a3d" : "#ffd93b", "center", 8);
+      g.globalAlpha = 1;
+    }
   } catch (e) {
     acc = 0;
     if (!errShown) { errShown = true; console.error(e); }

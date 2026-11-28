@@ -31,14 +31,15 @@ export function menuKeys(m) {
   return null;
 }
 
-/** A click or tap at game coords; returns an action, or null. Choices: left half goes back, right half forward. */
+/** A click or tap at game coords; returns an action, or null. */
 export function menuPointer(m, x, y) {
   for (let i = 0; i < m.rects.length; i++) {
     const r = m.rects[i];
     if (x < r.x || x > r.x + r.w || y < r.y || y > r.y + r.h) continue;
     m.sel = i;
     const it = m.items[i];
-    if (it.values) { change(it, x < r.x + r.w / 2 ? -1 : 1); return null; }
+    // a choice: ◀ and the left half of the value go back; ▶, the right half and the label go forward
+    if (it.values) { change(it, x >= r.back && x < r.mid ? -1 : 1); return null; }
     return it.action;
   }
   return null;
@@ -70,7 +71,9 @@ export function drawMenu(g, m, cx, y, wt) {
     g.font = FONT(it.values ? 15 : 19); g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = OUT;
     if (it.values) {
       g.textAlign = "left"; g.fillText(it.label, x + 16, yy + bh / 2 + 1);
-      g.textAlign = "right"; g.fillText(`◀  ${it.values[it.index]}  ▶`, x + bw - 14, yy + bh / 2 + 1);
+      const val = `◀  ${it.values[it.index]}  ▶`, vw = g.measureText(val).width, right = x + bw - 14;
+      g.textAlign = "right"; g.fillText(val, right, yy + bh / 2 + 1);
+      m.rects[i].back = right - vw - 12; m.rects[i].mid = right - vw / 2;
     } else g.fillText(it.label, cx, yy + bh / 2 + 1);
     g.restore();
   });

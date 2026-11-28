@@ -5,7 +5,9 @@
 //   demo     (?demo) the computer plays both sides, for testing
 import { W, H, DT, PAL, params, time } from "./config.js";
 import { readP1, take, clearPressed, anyPressed } from "./input.js";
-import { makeFighter, resetFighter, updateFighter, resolveSpacing, finishFighter, checkHit, applyHit, startMove, toWorld, TRAIL_LIFE } from "./fighter.js";
+import { makeFighter, resetFighter, updateFighter, resolveSpacing, finishFighter, checkHit, applyHit, startMove, toWorld, TRAIL_LIFE, snapFighter, applySnap } from "./fighter.js";
+import { MOVES } from "./rig.js";
+import { connect, newCode, CODE_LEN } from "./net.js";
 import { drawFighter, drawRibbons, drawShadow, drawRig, drawDizzy, tintPal } from "./draw.js";
 import { STAGES } from "./stage.js";
 import { spawnHit, updateFx, drawFx, drawTrail, drawDust, drawFlash, fighterEvent, clearFx, setDustColors } from "./fx.js";
@@ -114,7 +116,8 @@ const STAGE_IDS = [...STAGES.map((s) => s.id), "random"];
 const STAGE_NAMES = [...STAGES.map((s) => s.name), "Random"];
 function titleMenu() {
   return makeMenu([
-    { label: "FIGHT", action: "fight" },
+    { label: "FIGHT THE CPU", action: "fight" },
+    { label: "PLAY ONLINE", action: "online" },
     { label: "PRACTICE", action: "practice" },
     { label: "CPU LEVEL", values: LEVEL_NAMES, index: LEVEL_NAMES.indexOf(settings.level),
       onChange: (i) => { settings.level = LEVEL_NAMES[i]; saveSettings(); } },
@@ -122,8 +125,13 @@ function titleMenu() {
       onChange: (i) => { settings.stage = STAGE_IDS[i]; saveSettings(); if (STAGE_IDS[i] !== "random") setStage(i); } },
     { label: "SOUND", action: "sound" },
     { label: "CONTROLS", action: "controls" },
-  ], { kind: "title", gap: 8 });
+  ], { kind: "title", gap: 7, bh: 36 });
 }
+const onlineMenu = () => makeMenu([
+  { label: "HOST A GAME", action: "host" },
+  { label: "JOIN A GAME", action: "join" },
+  { label: "BACK", action: "title" },
+], { kind: "title", gap: 7, bh: 36 });
 /** Music and sound volume, opened from the title or pause menu; BACK returns there. */
 function soundMenu(back) {
   const levels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -131,7 +139,7 @@ function soundMenu(back) {
     { label: "MUSIC", values: levels, index: settings.music, onChange: (i) => { settings.music = i; setVolumes(settings.music, settings.sound); saveSettings(); } },
     { label: "SOUND EFFECTS", values: levels, index: settings.sound, onChange: (i) => { settings.sound = i; setVolumes(settings.music, settings.sound); saveSettings(); sfx("hit-light", { vol: 0.6 }); } },
     { label: "BACK", action: "back" },
-  ], { kind: back.kind, back, gap: back.gap });
+  ], { kind: back.kind, back, gap: back.gap, bh: back.bh });
 }
 function pauseMenu() {
   const items = [
@@ -147,8 +155,10 @@ function pauseMenu() {
     { label: "STAGE", values: STAGES.map((st) => st.name), index: stageI, onChange: (i) => setStage(i) });
   return makeMenu(items, { kind: "pause" });
 }
-function openPause() { menu = pauseMenu(); clearPressed(); resetTouch(); }
-const overMenu = () => makeMenu([{ label: "REMATCH", action: "fight" }, { label: "MAIN MENU", action: "title" }], { kind: "over" });
+function openPause() { menu = net ? netPauseMenu() : pauseMenu(); clearPressed(); resetTouch(); }
+// Online the game can't stop for one player, so this menu doesn't pause.
+const netPauseMenu = () => makeMenu([{ label: "RESUME", action: "resume" }, { label: "SOUND", action: "sound" }, { label: "LEAVE MATCH", action: "leave" }], { kind: "net" });
+const overMenu = () => makeMenu([{ label: "REMATCH", action: net ? "again" : "fight" }, { label: "MAIN MENU", action: net ? "leave" : "title" }], { kind: "over" });
 
 function doAction(a) {
   if (!a) return;
@@ -160,6 +170,13 @@ function doAction(a) {
   else if (a === "resume") { menu = null; clearPressed(); }
   else if (a === "restart") { if (scene === "match") startMatch(); else startPractice(); }
   else if (a === "title") goTitle();
+  else if (a === "online") menu = onlineMenu();
+  else if (a === "host") startHosting();
+  else if (a === "join") startJoining("");
+  else if (a === "go") joinRoom();
+  else if (a === "share") shareInvite();
+  else if (a === "cancel" || a === "leave") leaveOnline("");
+  else if (a === "again") { if (net.role === "host") startOnlineMatch(); else { net.send({ type: "again" }); notify("Asked for a rematch…"); } }
 }
 
 const paused = () => !!menu && menu.kind === "pause";
@@ -176,13 +193,19 @@ function landHit(att, def) {
   freeze = Math.max(freeze, FREEZE[r.kind] + (r.kind === "hit" ? 0.03 * r.pow : 0));
   shake = Math.max(shake, (big ? 3.4 : 2.2) * r.pow);
   if (big || r.pow >= 1.5) { zoom = Math.max(zoom, r.kind === "ko" ? 0.14 : big ? 0.08 : 0.04); zoomAt = [hit.x, hit.y]; }
-  spawnHit(hit.x, hit.y, r.pow, r.kind, att.sign);
-  hitSound(r, hit.x);
-  if (r.kind !== "block") stage.impact(hit.x, hit.y, r.kind === "ko" ? 2.4 : r.kind === "kd" || r.kind === "break" ? Math.max(1.6, r.pow) : r.pow);
+  hitEffects(hit.x, hit.y, r.pow, r.kind, att.sign);
+  if (sharing()) out.push(["h", Math.round(hit.x), Math.round(hit.y), r.pow, r.kind, att.sign]);
   if (r.kind === "ko") {
     koT = 0; koSlow = KO_SLOW; koFocus = def;
     if (scene === "match" && match.phase === "fight") endRound(att, "ko");
   }
+}
+
+/** The star, words, sound and scenery reaction for a hit (also replayed by the joining player online). */
+function hitEffects(x, y, pow, kind, dir) {
+  spawnHit(x, y, pow, kind, dir);
+  hitSound({ kind, pow }, x);
+  if (kind !== "block") stage.impact(x, y, kind === "ko" ? 2.4 : kind === "kd" || kind === "break" ? Math.max(1.6, pow) : pow);
 }
 
 function endRound(winner, why) {
@@ -192,11 +215,12 @@ function endRound(winner, why) {
 
 const IDLE = { dir: 0, speed: 1 };
 function intents() {
-  if (scene === "title" || scene === "demo") {
+  if (scene === "title" || scene === "demo" || scene === "lobby") {
     return koT >= 0 ? [IDLE, IDLE] : [aiIntent(P1, P2, AI1), aiIntent(P2, P1, AI)];
   }
   const live = scene === "practice" ? koT < 0 : match.phase === "fight";
   const i1 = live ? readP1() : IDLE;
+  if (net) { const i2 = remoteIntent(); return live ? [i1, i2] : [i1, IDLE]; }
   if (!live) return [i1, IDLE];
   if (scene === "practice" && MODES[mode] !== "CPU") return [i1, dummyIntent(P2)];
   return [i1, aiIntent(P2, P1, AI)];
@@ -220,7 +244,11 @@ function stepMatch(dt) {
     }
   } else if (match.phase === "over") celebrate(match.winner);
 }
-function celebrate(w) { if (w && w.hp > 0 && !w.move && !w.air) { startMove(w, "victory"); sfx("victory", { vol: 0.7, x: w.x, vary: 0 }); } }
+function celebrate(w) {
+  if (!w || w.hp <= 0 || w.move || w.air) return;
+  startMove(w, "victory"); sfx("victory", { vol: 0.7, x: w.x, vary: 0 });
+  if (sharing()) out.push(["v", w === P1 ? 0 : 1]);
+}
 
 // --- sounds for hits and for what the fighters do ---
 function hitSound(r, x) {
@@ -248,10 +276,11 @@ function eventSound(e, f) {
 }
 
 function step(dt) {
+  if (net && net.role === "guest" && scene === "match") { guestStep(dt); return; }
   time.wt += dt;
   if (koT >= 0) koT += dt;
   if (scene === "match") stepMatch(dt);
-  else if (koT > 3.2) resetFighters(); // practice, title, demo: just start again
+  else if (koT > 3.2) resetFighters(); // practice, title, lobby, demo: just start again
   if (scene === "practice" && !menu) {
     if (take("KeyB")) setStage(stageI + 1);
     if (take("KeyT")) { mode = (mode + 1) % MODES.length; P2.homing = false; resetAI(AI); }
@@ -269,6 +298,7 @@ function step(dt) {
       for (const e of f.events) {
         if (e.t === "slam") { const h = toWorld(f, f.sol.head)[0], b = toWorld(f, f.sol.hip)[0]; e.x = (h + b) / 2; shake = Math.max(shake, 3); }
         fighterEvent(e, f); eventSound(e, f);
+        if (sharing()) out.push(["f", f === P1 ? 0 : 1, e.move ? { ...e, move: e.move.name } : e]);
       }
       f.events.length = 0;
     }
@@ -285,6 +315,190 @@ function step(dt) {
   camX = (Math.random() - 0.5) * 2 * shake; camY = (Math.random() - 0.5) * 2 * shake;
 }
 
+// --- online play ---
+// The host's game runs the fight with the friend as P2; the friend (guest) sends what they press and
+// draws the snapshots the host sends back, replaying the hits, dust and sounds listed in them.
+let net = null;                                // the connection while online
+const lobby = { kind: "", code: "", digits: "", status: "", tries: 0 };
+const notice = { text: "", t: 0 };
+const notify = (text, t = 3.5) => { notice.text = text; notice.t = t; };
+let out = [];                                  // host: what happened since the last snapshot
+let remote = { d: 0, c: 0, b: 0, p: "" };      // host: what the guest is pressing
+let snaps = [], guestSpeed = 1, sentIn = "", sentInT = 0; // guest
+const me = () => (net && net.role === "guest" ? P2 : P1);
+/** Host, in a match: what happens is collected for the friend's screen. */
+const sharing = () => net && net.role === "host" && scene === "match";
+const inviteUrl = (code) => `${location.origin}/?join=${code}`;
+
+function startHosting() {
+  scene = "lobby"; menu = makeMenu([{ label: "SHARE INVITE LINK", action: "share" }, { label: "CANCEL", action: "cancel" }], { kind: "lobby" });
+  Object.assign(lobby, { kind: "host", tries: 0 });
+  openRoom();
+}
+function openRoom() {
+  lobby.code = newCode(); lobby.status = "Connecting…";
+  net = connect(lobby.code, true, onNet);
+}
+function startJoining(digits) {
+  scene = "lobby"; menu = makeMenu([{ label: "JOIN", action: "go" }, { label: "CANCEL", action: "cancel" }], { kind: "lobby" });
+  Object.assign(lobby, { kind: "join", digits, status: "Type the room code your friend sees" });
+  if (digits.length === CODE_LEN) joinRoom();
+}
+function joinRoom() {
+  if (lobby.digits.length !== CODE_LEN || net) return;
+  lobby.code = lobby.digits; lobby.status = "Connecting…";
+  net = connect(lobby.code, false, onNet);
+}
+function shareInvite() {
+  const url = inviteUrl(lobby.code);
+  if (navigator.share) navigator.share({ title: "KungFu 2", text: `Fight me in KungFu 2! Room ${lobby.code}`, url }).catch(() => {});
+  else navigator.clipboard?.writeText(url).then(() => notify("Invite link copied"), () => notify(url, 6));
+}
+/** Leaves online play (or stops trying to connect) and goes back to the title, with a message. */
+function leaveOnline(text) {
+  if (net) { net.close(); net = null; }
+  clearInterval(startOnlineMatch.ping);
+  snaps = []; out = [];
+  goTitle();
+  if (text) notify(text, 4);
+}
+
+function onNet(type, msg) {
+  const n = net;
+  if (!n) return;
+  if (type === "joined") lobby.status = n.role === "host" ? "Waiting for your friend to join…" : "Joined! Starting…";
+  else if (type === "room_taken") { n.close(); net = null; if (++lobby.tries < 6) openRoom(); else leaveOnline("Couldn't open a room. Try again."); }
+  else if (type === "no_room" || type === "room_full") {
+    n.close(); net = null;
+    lobby.status = type === "no_room" ? `No game is waiting with code ${lobby.code}` : `Game ${lobby.code} already has two players`;
+    lobby.digits = "";
+  } else if (type === "auth_failed") leaveOnline("Hosting is locked on this server");
+  else if (type === "ready" && n.role === "host") startOnlineMatch();
+  else if (type === "setup") { setStage(Math.max(0, STAGES.findIndex((st) => st.id === msg.stage))); startGuestMatch(); }
+  else if (type === "st") { snaps.push(msg); if (snaps.length > 8) snaps.splice(0, snaps.length - 3); }
+  else if (type === "in") { remote.d = msg.d; remote.c = msg.c; remote.b = msg.b; remote.p += msg.p || ""; }
+  else if (type === "again" && n.role === "host" && match.phase === "over") startOnlineMatch();
+  else if (type === "ping") n.send({ type: "pong", t: msg.t });
+  else if (type === "pong") n.rtt = Math.round(performance.now() - msg.t);
+  else if (type === "peer_left") leaveOnline("Your friend left the game");
+  else if (type === "closed") leaveOnline("The connection was lost");
+  else if (type === "error") { if (scene === "lobby" && n.role === "guest" && !n.open) { net = null; lobby.status = "Couldn't reach the server. Try again."; } else leaveOnline("Couldn't reach the server"); }
+}
+
+function startOnlineMatch() {
+  scene = "match"; menu = null; clearPressed(); resetTouch();
+  match.round = 1; match.wins = [0, 0];
+  remote = { d: 0, c: 0, b: 0, p: "" };
+  net.send({ type: "setup", stage: stage.id });
+  startRound();
+  clearInterval(startOnlineMatch.ping);
+  startOnlineMatch.ping = setInterval(() => net && net.send({ type: "ping", t: performance.now() }), 2000);
+}
+function startGuestMatch() {
+  scene = "match"; menu = null; clearPressed(); resetTouch(); snaps = [];
+  resetFighters();
+  Object.assign(match, { round: 1, wins: [0, 0], phase: "intro", t: 0, timer: ROUND_TIME, winner: null, why: "" });
+}
+
+/** Host: P2's intent from what the guest last sent; presses are used once. */
+function remoteIntent() {
+  const p = remote.p; remote.p = "";
+  return { dir: remote.d, speed: 1, crouch: !!remote.c, block: !!remote.b,
+    punch: p.includes("j"), kick: p.includes("k"), heavy: p.includes("l"), jump: p.includes("w"), roll: p.includes("u") };
+}
+
+function sendSnapshot(sp) {
+  const w = match.winner === P1 ? 0 : match.winner === P2 ? 1 : -1;
+  net.send({
+    type: "st", t: Math.round(time.gt * 1000) / 1000, p: [snapFighter(P1), snapFighter(P2)],
+    m: [match.phase, Math.round(match.t * 100) / 100, Math.round(match.timer * 10) / 10, match.wins, match.round, w, match.why],
+    c: [Math.round(zoom * 1000) / 1000, Math.round(zoomAt[0]), Math.round(zoomAt[1]), Math.round(shake * 10) / 10],
+    sp: Math.round(sp * 100) / 100, la: lastAttacker === P1 ? 0 : 1, rt: net.rtt, e: out,
+  });
+  out = [];
+}
+
+/** Guest: send what is pressed (when it changes, and twice a second anyway), then show the next snapshot. */
+function guestStep(dt) {
+  time.wt += dt;
+  const it = menu ? IDLE : readP1();
+  const p = (it.punch ? "j" : "") + (it.kick ? "k" : "") + (it.heavy ? "l" : "") + (it.jump ? "w" : "") + (it.roll ? "u" : "");
+  const held = `${it.dir}|${it.crouch ? 1 : 0}|${it.block ? 1 : 0}`;
+  sentInT -= dt;
+  if (p || held !== sentIn || sentInT <= 0) { net.send({ type: "in", d: it.dir, c: it.crouch ? 1 : 0, b: it.block ? 1 : 0, p }); sentIn = held; sentInT = 0.5; }
+  // keep about two snapshots in hand to smooth out network jitter; skip ahead if they pile up
+  if (snaps.length > 4) snaps.splice(0, snaps.length - 2);
+  const s = snaps.shift();
+  if (s) {
+    time.gt = s.t;
+    applySnap(P1, s.p[0], dt); applySnap(P2, s.p[1], dt);
+    const [ph, t, timer, wins, round, w, why] = s.m;
+    Object.assign(match, { phase: ph, t, timer, wins, round, winner: w === 0 ? P1 : w === 1 ? P2 : null, why });
+    [zoom, zoomAt[0], zoomAt[1], shake] = s.c;
+    guestSpeed = s.sp; lastAttacker = s.la === 0 ? P1 : P2; net.rtt = s.rt;
+    for (const e of s.e) {
+      if (e[0] === "h") hitEffects(e[1], e[2], e[3], e[4], e[5]);
+      else if (e[0] === "v") sfx("victory", { vol: 0.7, x: (e[1] ? P2 : P1).x, vary: 0 });
+      else if (e[0] === "f") { const f = e[1] ? P2 : P1, ev = e[2]; if (ev.move) ev.move = MOVES[ev.move]; fighterEvent(ev, f); eventSound(ev, f); }
+    }
+    if (ph === "over" && !menu) { menu = overMenu(); clearPressed(); resetTouch(); }
+    else if (ph !== "over" && menu && menu.kind === "over") menu = null;
+  }
+  updateFx(dt); stage.update(dt); hudTick([P1, P2], dt);
+  camX = (Math.random() - 0.5) * 2 * shake; camY = (Math.random() - 0.5) * 2 * shake;
+}
+
+// --- lobby screens ---
+const KEYPAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
+const keypadRect = (i) => ({ x: W / 2 - 105 + (i % 3) * 72, y: 214 + Math.floor(i / 3) * 52, w: 66, h: 46 });
+function typeDigit(k) {
+  if (net) return;
+  if (k === "⌫") lobby.digits = lobby.digits.slice(0, -1);
+  else if (k === "OK") joinRoom();
+  else if (lobby.digits.length < CODE_LEN) { lobby.digits += k; if (lobby.digits.length === CODE_LEN) joinRoom(); }
+  sfx("whiff", { vol: 0.2, rate: 1.9, vary: 0.03 });
+}
+function lobbyKeys() {
+  for (let d = 0; d <= 9; d++) if (take("Digit" + d, "Numpad" + d)) typeDigit(String(d));
+  if (take("Backspace")) typeDigit("⌫");
+}
+function keypadTap(x, y) {
+  for (let i = 0; i < KEYPAD.length; i++) {
+    const r = keypadRect(i);
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { typeDigit(KEYPAD[i]); return true; }
+  }
+  return false;
+}
+function drawLobby(g) {
+  dim(g, 0.35);
+  drawText(g, lobby.kind === "host" ? "HOST A GAME" : "JOIN A GAME", W / 2, 62, 40, "#ffd93b", "center", 9);
+  const dots = ".".repeat(1 + Math.floor(time.wt * 2) % 3);
+  if (lobby.kind === "host") {
+    drawText(g, "Your room code", W / 2, 128, 18, "#fff8ec", "center", 5);
+    drawText(g, net && net.open ? lobby.code : "…", W / 2, 192, 84, "#fff8ec", "center", 14);
+    drawText(g, `Your friend picks PLAY ONLINE, then JOIN A GAME, and types it in.`, W / 2, 262, 15, "#fff8ec", "center", 5);
+    drawText(g, `Or send them the invite link: ${inviteUrl(lobby.code).replace(/^https?:\/\//, "")}`, W / 2, 288, 15, "#fff8ec", "center", 5);
+    drawText(g, lobby.status.replace("…", dots), W / 2, 334, 18, "#ffd93b", "center", 5);
+    drawMenu(g, menu, W / 2, 380, time.wt);
+  } else {
+    for (let i = 0; i < CODE_LEN; i++) {
+      const x = W / 2 + (i - (CODE_LEN - 1) / 2) * 62;
+      g.fillStyle = "#1d1622"; g.beginPath(); g.roundRect(x - 27, 106, 54, 66, 10); g.fill();
+      g.fillStyle = "#fff8ec"; g.beginPath(); g.roundRect(x - 24, 109, 48, 60, 8); g.fill();
+      if (lobby.digits[i]) drawText(g, lobby.digits[i], x, 141, 40, "#ffd93b", "center", 8);
+    }
+    drawText(g, net ? lobby.status.replace("…", dots) : lobby.status, W / 2, 192, 16, "#fff8ec", "center", 5);
+    KEYPAD.forEach((k, i) => {
+      const r = keypadRect(i);
+      g.fillStyle = "#1d1622"; g.beginPath(); g.roundRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4, 10); g.fill();
+      g.fillStyle = k === "OK" ? "#ffd93b" : "#fff8ec"; g.beginPath(); g.roundRect(r.x, r.y, r.w, r.h, 8); g.fill();
+      g.font = '900 20px "Arial Black", Impact, system-ui, sans-serif'; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#1d1622";
+      g.fillText(k, r.x + r.w / 2, r.y + r.h / 2 + 1);
+    });
+    drawMenu(g, menu, W / 2 + 290, 330, time.wt);
+  }
+}
+
 // --- what the HUD shows ---
 function banner() {
   if (scene === "title") return null;
@@ -298,10 +512,10 @@ function banner() {
     if (m.phase === "end") {
       const first = m.why === "ko" ? "K.O.!" : "TIME!";
       if (m.t < 1.5) return m.t > 0.1 ? { text: first, t: m.t - 0.1 } : null;
-      const who = !m.winner ? "DRAW" : m.winner === P1 ? "YOU WIN THE ROUND" : "CPU WINS THE ROUND";
+      const who = !m.winner ? "DRAW" : m.winner === me() ? "YOU WIN THE ROUND" : net ? "YOUR FRIEND WINS THE ROUND" : "CPU WINS THE ROUND";
       return { text: who, t: m.t - 1.5, small: true };
     }
-    if (m.phase === "over") return { text: m.winner === P1 ? "YOU WIN!" : "YOU LOSE", t: m.t, hot: m.winner === P1 };
+    if (m.phase === "over") return { text: m.winner === me() ? "YOU WIN!" : "YOU LOSE", t: m.t, hot: m.winner === me() };
     return null;
   }
   return koT >= 0.15 ? { text: "K.O.!", t: koT - 0.15 } : null;
@@ -324,12 +538,13 @@ function render() {
   g.restore();
   drawFlash(g);
 
-  if (scene === "title") {
+  if (scene === "title" || scene === "lobby") {
     const gr = g.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, "rgba(23,18,29,0.15)"); gr.addColorStop(0.5, "rgba(23,18,29,0.35)"); gr.addColorStop(1, "rgba(23,18,29,0.6)");
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    drawLogo(g, W / 2, 112, time.wt);
-    drawMenu(g, menu, W / 2, 222, time.wt);
+    if (scene === "lobby") drawLobby(g);
+    else { drawLogo(g, W / 2, 106, time.wt); drawMenu(g, menu, W / 2, 205, time.wt); }
+    if (notice.t > 0) drawText(g, notice.text, W / 2, H - 16, 15, "#ffd93b", "center", 5);
     drawText(g, isMuted() ? "SOUND OFF  (M)" : "M: sound on/off", W - 14, H - 16, 12, "#fff8ec", "right", 4);
     if (showControls) drawControls(g);
     return;
@@ -337,10 +552,12 @@ function render() {
   drawHud(g, P1, P2, {
     scene, mode: MODES[mode], level: AI.level, stage: stage.name, slow, banner: banner(),
     timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null, touch: touch.on, muted: isMuted(),
+    names: net ? (net.role === "host" ? ["YOU", "FRIEND"] : ["FRIEND", "YOU"]) : null, ping: net ? net.rtt : null,
   });
+  if (notice.t > 0) drawText(g, notice.text, W / 2, 128, 18, "#ffd93b", "center", 5);
   if (menu) {
-    const top = menu.kind === "pause" ? Math.max(150, 300 - menu.items.length * 30) : 300;
-    if (menu.kind === "pause") { dim(g, 0.5); drawText(g, "PAUSED", W / 2, top - 55, 44, "#ffd93b", "center", 10); }
+    const top = menu.kind === "pause" || menu.kind === "net" ? Math.max(150, 300 - menu.items.length * 30) : 300;
+    if (menu.kind === "pause" || menu.kind === "net") { dim(g, 0.5); drawText(g, menu.kind === "net" ? "MENU" : "PAUSED", W / 2, top - 55, 44, "#ffd93b", "center", 10); }
     drawMenu(g, menu, W / 2, top, time.wt);
   } else if (!showControls && (scene === "match" || scene === "practice")) drawTouch(g);
 }
@@ -359,7 +576,8 @@ function frame(now) {
     if (take("Backquote")) showRig = !showRig;
     if (showControls) { if (anyPressed()) showControls = false; }
     else if (menu) {
-      if (menu.kind === "pause" && take("Escape", "KeyP")) doAction("resume");
+      if ((menu.kind === "pause" || menu.kind === "net") && take("Escape", "KeyP")) doAction("resume");
+      else if (scene === "lobby" && lobby.kind === "join") { lobbyKeys(); menuSounds(() => menuKeys(menu)); }
       else menuSounds(() => menuKeys(menu));
     } else if ((scene === "match" || scene === "practice") && (take("Escape", "KeyP") || isPortrait())) openPause();
     if (paused()) fdt = 0;
@@ -371,10 +589,13 @@ function frame(now) {
     }
     let speedNow = 1;
     if (koSlow > 0 && freeze <= 0) speedNow = 0.18 + 0.82 * Math.pow(1 - koSlow / KO_SLOW, 2);
+    if (net && net.role === "guest") speedNow = guestSpeed;
+    notice.t -= Math.min(0.1, (now - (frame.prev || now)) / 1000);
     audioTick(Math.min(0.1, (now - (frame.prev || now)) / 1000), speedNow, scene === "title" ? "title" : paused() ? "pause" : "play");
     frame.prev = now;
     acc += slow ? fdt * 0.25 : fdt;
     while (acc >= DT) { step(DT); acc -= DT; }
+    if (net && net.role === "host" && net.ready && scene === "match" && now - (frame.sent || 0) > 14) { frame.sent = now; sendSnapshot(speedNow); }
     render();
     if (soundToast > 0) {
       g.globalAlpha = Math.min(1, soundToast * 3);
@@ -393,6 +614,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (showControls) { showControls = false; return; }
   if (!menu) return;
   const r = canvas.getBoundingClientRect();
+  if (scene === "lobby" && lobby.kind === "join" && keypadTap(((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H)) return;
   menuSounds(() => menuPointer(menu, ((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H));
 });
 
@@ -409,6 +631,12 @@ addEventListener("pointerdown", unlock); addEventListener("keydown", unlock);
 canvas.focus();
 document.getElementById("nojs")?.remove();
 initTouch(canvas, { active: () => !menu && !showControls && (scene === "match" || scene === "practice"), onPause: openPause });
+if (/^[0-9]+$/.test(params.get("join") || "")) {
+  // an invite link: join straight away, and tidy the address so a reload doesn't join an old room
+  const code = params.get("join");
+  try { history.replaceState(null, "", location.pathname); } catch { /* ignore */ }
+  setTimeout(() => startJoining(code), 0);
+}
 
 // Where to start. ?demo: computer vs computer; ?mode=Block (or Stand, Crouch, Jump, CPU): practice; ?fight: straight into a match.
 if (params.has("demo")) {
@@ -425,7 +653,7 @@ requestAnimationFrame(frame);
 
 // Test hook for screenshot scripts.
 window.__kf = {
-  P1, P2, AI, AI1, time, step, match, reset: resetFighters, startMatch, goTitle, doAction,
+  P1, P2, AI, AI1, time, step, match, reset: resetFighters, startMatch, goTitle, doAction, lobby, get net() { return net; },
   setMode: (m) => { mode = Math.max(0, MODES.indexOf(m === "Fight" ? "CPU" : m)); },
   get scene() { return scene; }, get menu() { return menu; },
 };

@@ -58,7 +58,7 @@ function roundRect(g, x, y, w, h, r) {
 
 /** Draws the menu as a column of buttons centred at cx, starting at y. */
 export function drawMenu(g, m, cx, y, wt) {
-  const bw = 330, bh = 40, gap = m.gap ?? 10;
+  const bw = 330, bh = m.bh ?? 40, gap = m.gap ?? 10;
   m.rects = [];
   m.items.forEach((it, i) => {
     const x = cx - bw / 2, yy = y + i * (bh + gap), on = i === m.sel;
@@ -68,7 +68,7 @@ export function drawMenu(g, m, cx, y, wt) {
     roundRect(g, x - 3, yy - 3, bw + 6, bh + 6, 12); g.fillStyle = OUT; g.fill();
     roundRect(g, x, yy, bw, bh, 10); g.fillStyle = on ? "#ffd93b" : "#fff8ec"; g.fill();
     g.fillStyle = on ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.5)"; roundRect(g, x + 4, yy + 3, bw - 8, bh * 0.38, 7); g.fill();
-    g.font = FONT(it.values ? 15 : 19); g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = OUT;
+    g.font = FONT(it.values ? 15 : bh < 40 ? 17 : 19); g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = OUT;
     if (it.values) {
       g.textAlign = "left"; g.fillText(it.label, x + 16, yy + bh / 2 + 1);
       const val = `◀  ${it.values[it.index]}  ▶`, vw = g.measureText(val).width, right = x + bw - 14;

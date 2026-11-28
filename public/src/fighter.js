@@ -230,6 +230,12 @@ export function finishFighter(f, dt) {
   const ank = [s.lF.an, s.lB.an];
   for (let i = 0; i < 2; i++) if (ik[i] < 0.5 || f.air) { f.feet[i].x = toWorld(f, ank[i])[0]; f.feet[i].step = null; }
 
+  finishVisuals(f, dt);
+}
+
+/** Headband ribbons and the strike streak, which only follow the skeleton (also used online by the joining player). */
+export function finishVisuals(f, dt) {
+  const s = f.sol;
   if (dt > 0) {
     f.rib.forEach((r, i) => updateRibbon(f, r, i, dt));
     // The streak follows the striking fist (or the foot, once chambered) from just before its strike window to its end.
@@ -239,6 +245,26 @@ export function finishFighter(f, dt) {
     if (striking) { const w = toWorld(f, LIMB[m.limb](s)); f.trail.push({ x: w[0], y: w[1], t: time.gt, w: m.pow || 1, fist: m.limb.startsWith("fist") }); }
     while (f.trail.length && time.gt - f.trail[0].t > TRAIL_LIFE) f.trail.shift();
   } else f.rib.forEach((r, i) => { if (!r.pts) updateRibbon(f, r, i, 1 / 60); });
+}
+
+// ---------- online: what the joining player needs to draw a fighter ----------
+const JOINTS = (s) => [s.hip, s.shoulder, s.neck, s.head, s.aF.el, s.aF.wr, s.aB.el, s.aB.wr, s.lF.knee, s.lF.an, s.lF.toe, s.lB.knee, s.lB.an, s.lB.toe];
+const r1 = (v) => Math.round(v * 10) / 10;
+
+/** A compact copy of a fighter: position, health, current move and its skeleton. */
+export function snapFighter(f) {
+  const j = [];
+  for (const p of JOINTS(f.sol)) j.push(r1(p[0]), r1(p[1]));
+  return { x: r1(f.x), y: r1(f.y), hx: r1(f.hx), hy: r1(f.hy), s: f.sign, hp: f.hp, g: Math.round(f.guard), m: f.move ? f.move.name : "", mt: Math.round(f.mt * 1000) / 1000, r: r1(f.sol.headRot * 100) / 100, j };
+}
+
+/** Puts a fighter where a snapshot says it is. */
+export function applySnap(f, d, dt) {
+  Object.assign(f, { x: d.x, y: d.y, hx: d.hx, hy: d.hy, sign: d.s, hp: d.hp, guard: d.g, move: d.m ? MOVES[d.m] : null, mt: d.mt });
+  const s = f.sol, pts = JOINTS(s);
+  for (let i = 0; i < pts.length; i++) { pts[i][0] = d.j[2 * i]; pts[i][1] = d.j[2 * i + 1]; }
+  s.headRot = d.r;
+  finishVisuals(f, dt);
 }
 
 function updateRibbon(f, r, i, dt) {

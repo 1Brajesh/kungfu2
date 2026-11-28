@@ -62,7 +62,7 @@ function footer(g, text, y) {
 export function drawHud(g, p1, p2, info) {
   const bw = 360, y = 22;
   const cpu = info.scene !== "practice" || info.mode === "CPU";
-  const names = ["YOU", cpu ? `CPU · ${info.level.toUpperCase()}` : "PRACTICE"];
+  const names = info.names || ["YOU", cpu ? `CPU · ${info.level.toUpperCase()}` : "PRACTICE"];
   if (info.scene === "demo") names[0] = "CPU";
   [[p1, 24, false], [p2, W - 24 - bw, true]].forEach(([f, x, flip], i) => {
     const hp = f.hp / MAX_HP, col = hp > 0.5 ? "#53d769" : hp > 0.25 ? "#ffc53a" : "#ff4d4d";
@@ -90,6 +90,7 @@ export function drawHud(g, p1, p2, info) {
   }
 
   if (info.muted) label(g, "SOUND OFF  (M)", W - 14, H - 62, "right", 11);
+  if (info.ping) label(g, `ping ${info.ping} ms`, 14, H - 62, "left", 11);
   if (info.touch) return; // the on-screen buttons replace the key reminders
   if (info.scene === "practice") footer(g, `T opponent (${info.mode})    1 2 3 CPU level    B stage (${info.stage})    Esc menu`, H - 47);
   footer(g, "A/D walk   W jump   S crouch   J punch (×3 combo)   K kick   L heavy   S+K sweep   I block   U roll   in air: J / K", H - 21);

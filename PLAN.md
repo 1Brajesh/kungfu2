@@ -13,9 +13,10 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 - The game is drawn at 960×540 and scaled to fit any window, keeping its shape and staying sharp on Retina screens.
 - The game updates at a steady 60 times a second, so it plays the same on every screen. This is also what online play will need later.
 - To run it locally: `python3 -m http.server -d public 8000`, then open http://localhost:8000. ES modules don't load from a plain `file://` page.
-- To deploy: `npx wrangler deploy`, which serves `public/` as static files.
+- To deploy: `npx wrangler deploy`, which serves `public/` as static files and runs `worker/index.js` (the online relay) for `/ws/…`.
+- To test online play locally: `npx wrangler dev` (http://localhost:8787 runs the relay too), then open two browser windows.
 
-### Files (`public/src/`)
+### Files (`public/src/`, plus `worker/index.js`: the relay for online play, one Durable Object per room)
 | File | What's in it |
 |---|---|
 | `config.js` | Screen size, bone lengths, colours, speeds |
@@ -31,6 +32,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `menu.js` | Title, pause and match-over menus (keys, mouse and touch), the logo, the controls card |
 | `touch.js` | On-screen controls for phones: floating stick, five buttons, pause; they press the same keys as the keyboard |
 | `audio.js` | Sound and music: Web Audio, variation, panning, music muffle and dips, K.O. slow-motion sound |
+| `net.js` | Online play: the WebSocket to the relay, room codes |
 | `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
 | `main.js` | The game loop, the screens (title, match, practice), rounds and timer, hit-freeze, shake and zoom, K.O. |
 
@@ -110,6 +112,13 @@ Each stage draws a background and a foreground, moves its own scenery, reacts to
 - Held upright, the phone shows "Turn your phone sideways to play" and a match pauses. On Android the game goes full screen and locks to landscape on the first touch; on iPhone, Add to Home Screen gives full screen.
 - Touches become the same key presses as the keyboard (`touchPress`/`touchHold` in `input.js`), so the fighting code and menus don't know the difference.
 
+### Online play
+- **PLAY ONLINE → HOST A GAME** opens a room with a 3-digit code and an invite link (`/?join=123`; SHARE INVITE LINK uses the phone's share sheet or copies it). **JOIN A GAME** has a keypad (or type the digits). Opening an invite link joins straight away.
+- The match is the usual best of 3 on the host's stage. The host is P1 (white, left), the friend P2 (blue, right); each sees YOU over their own bar and FRIEND over the other, and the ping at the bottom left.
+- **How it works:** the host's game runs the fight. The friend's game sends what they press (when it changes, and twice a second anyway) and draws the snapshots the host sends back about 60 times a second: both skeletons, health, guard, the match, the camera, the slow-motion speed, and a list of what just happened (hits, footsteps, landings, victory) so the friend sees the same effects and hears the same sounds. The friend keeps about two snapshots in hand to smooth out network jitter. So the host plays with no delay and the friend's own moves show up after one round trip.
+- Online the game doesn't pause: Esc (or the touch pause button) opens RESUME, SOUND, LEAVE MATCH. Either player can ask for a REMATCH at the end. If either player leaves or the connection drops, the other goes back to the title with a message.
+- **Server:** `worker/index.js`, the original game's relay ported to plain JavaScript and served by the same Worker as the site (`/ws/<code>`, `?create=1` to host). If the `HOST_TOKEN` secret is set (`npx wrangler secret put HOST_TOKEN`), hosting needs it; it isn't set, so anyone can host. Cost: each online match sends roughly 60–70 messages a second through the room, which Cloudflare bills as about 3 requests a second (about 11,000 an hour of play).
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
@@ -118,7 +127,7 @@ Each stage draws a background and a foreground, moves its own scenery, reacts to
 5. **The computer opponent**, **rounds and menus** and **touch controls for phones** (all done).
    *Next: step 6, more fighters.*
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
-7. **Online play** through the original game's relay design.
+7. **Online play** (done, brought forward) through the original game's relay design.
 
 ### Sound (pass 1 of 3 done)
 The sounds (ElevenLabs) and the music, "Bamboo Grove Duel" (Suno), come from the original game, in `public/sounds/`. The music is the 1.5 MB m4a, with the mp3 as a fallback.

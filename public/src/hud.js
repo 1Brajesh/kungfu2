@@ -89,6 +89,7 @@ export function drawHud(g, p1, p2, info) {
     g.fillStyle = "#ffd93b"; g.fillText(tag, W / 2, 100);
   }
 
+  if (info.muted) label(g, "SOUND OFF  (M)", W - 14, H - 62, "right", 11);
   if (info.touch) return; // the on-screen buttons replace the key reminders
   if (info.scene === "practice") footer(g, `T opponent (${info.mode})    1 2 3 CPU level    B stage (${info.stage})    Esc menu`, H - 47);
   footer(g, "A/D walk   W jump   S crouch   J punch (×3 combo)   K kick   L heavy   S+K sweep   I block   U roll   in air: J / K", H - 21);

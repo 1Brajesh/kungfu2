@@ -30,6 +30,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `hud.js` | Health bars, guard meters, banners, the controls line |
 | `menu.js` | Title, pause and match-over menus (keys, mouse and touch), the logo, the controls card |
 | `touch.js` | On-screen controls for phones: floating stick, five buttons, pause; they press the same keys as the keyboard |
+| `audio.js` | Sound and music: Web Audio, variation, panning, music muffle and dips, K.O. slow-motion sound |
 | `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
 | `main.js` | The game loop, the screens (title, match, practice), rounds and timer, hit-freeze, shake and zoom, K.O. |
 
@@ -54,14 +55,15 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Block (hold; wears the guard meter down) | I |
 | Roll (through the opponent if you hold toward them, otherwise away) | U |
 | Flying kick / down smash (in the air) | K / J |
-| Pause menu (resume, restart, main menu) | Esc or P |
+| Pause menu (resume, restart, sound, main menu) | Esc or P |
+| Sound on/off | M |
 | *Practice only:* change what the opponent does (stand, block, crouch, jump, CPU) | T |
 | *Practice only:* CPU level Easy / Normal / Hard | 1 / 2 / 3 |
 | *Practice only:* change stage | B |
 | Skeleton view | ` (backquote) |
 | Slow motion | O |
 
-URL options for testing: `?touch` (show the touch controls on a computer), `?rig` (skeleton on), `?slow`, `?fight` (skip the title, straight into a match), `?mode=Block` (straight into practice; Stand, Block, Crouch, Jump or CPU), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
+URL options for testing: `?soundlog` (records every sound played in `window.__sounds`), `?touch` (show the touch controls on a computer), `?rig` (skeleton on), `?slow`, `?fight` (skip the title, straight into a match), `?mode=Block` (straight into practice; Stand, Block, Crouch, Jump or CPU), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
 
 ### Fighting rules (step 2)
 - Health 100. Jab 6, cross 8, uppercut 12, kick 10, sweep 8, flying kick 14, down smash 16, heavy kick 20.
@@ -118,7 +120,17 @@ Each stage draws a background and a foreground, moves its own scenery, reacts to
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
 7. **Online play** through the original game's relay design.
 
-Sound: use recorded hit sounds and music, as in the original (they sound better than synthesised hits).
+### Sound (pass 1 of 3 done)
+The sounds (ElevenLabs) and the music, "Bamboo Grove Duel" (Suno), come from the original game, in `public/sounds/`. The music is the 1.5 MB m4a, with the mp3 as a fallback.
+- Every sound plays with a little random pitch and volume, panned left or right to where it happens.
+- **Strikes:** a whoosh as each strike goes out (high for jabs, low for the heavy kick); air attacks use the spin sound.
+- **Hits:** light or heavy by the blow's weight; knockdowns and the K.O. stack a low, slowed copy underneath for a thump; blocks, guard breaks (a deeper block plus a crack), the body hitting the floor (knockdown sound), the victory sting when a round is won.
+- **Movement:** footsteps (at most about six a second per fighter), jump, landing (louder from higher), roll, crouch.
+- **Music:** soft and muffled on the title, full in a fight, muffled further when paused, and dipped for a moment under big hits.
+- **K.O. slow motion:** after the impact freeze, every sound and the music drop in pitch and lose their top end, then come back as the game speeds up.
+- **Menus:** a tick when the selection or a setting changes and a thump when something is chosen.
+- **Settings:** SOUND in the title and pause menus has Music and Sound effects volume (0–10, remembered); M mutes everything. Browsers stay silent until the first click, tap or key press, which is when the audio starts.
+- *Pass 2:* stage ambience tied to the scenery (birds, bamboo wind, crickets, firework pops) and round sounds (gong, drum). *Pass 3:* music that changes with the fight, a track per stage, and maybe an announcer and fighter shouts.
 
 ## Risks
 - Hand-posed animation can look stiff. The user judges the motion; Claude checks poses with screenshot strips taken by Playwright.

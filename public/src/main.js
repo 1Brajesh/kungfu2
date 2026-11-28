@@ -13,6 +13,7 @@ import { hudTick, drawHud } from "./hud.js";
 import { makeAI, resetAI, aiIntent, LEVEL_NAMES } from "./ai.js";
 import { makeMenu, menuKeys, menuPointer, drawMenu, drawLogo, drawControls, dim, drawText } from "./menu.js";
 import { touch, initTouch, drawTouch, resetTouch, isPortrait } from "./touch.js";
+import { sfx, duck, unlock, audioTick, setVolumes, toggleMute, isMuted } from "./audio.js";
 
 const canvas = document.getElementById("game");
 const g = canvas.getContext("2d");
@@ -28,11 +29,12 @@ addEventListener("resize", fit);
 fit();
 
 // --- settings, remembered between visits ---
-const settings = { level: "Normal", stage: "temple" };
+const settings = { level: "Normal", stage: "temple", music: 6, sound: 8 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("kf2.settings") || "{}")); } catch { /* private mode */ }
 const saveSettings = () => { try { localStorage.setItem("kf2.settings", JSON.stringify(settings)); } catch { /* ignore */ } };
 if (!LEVEL_NAMES.includes(settings.level)) settings.level = "Normal";
 if (LEVEL_NAMES.includes(params.get("level"))) settings.level = params.get("level");
+setVolumes(settings.music, settings.sound);
 
 const START = [330, 630];
 const P1 = makeFighter("p1", START[0], PAL.white, 1);
@@ -118,13 +120,24 @@ function titleMenu() {
       onChange: (i) => { settings.level = LEVEL_NAMES[i]; saveSettings(); } },
     { label: "STAGE", values: STAGE_NAMES, index: Math.max(0, STAGE_IDS.indexOf(settings.stage)),
       onChange: (i) => { settings.stage = STAGE_IDS[i]; saveSettings(); if (STAGE_IDS[i] !== "random") setStage(i); } },
+    { label: "SOUND", action: "sound" },
     { label: "CONTROLS", action: "controls" },
-  ], { kind: "title" });
+  ], { kind: "title", gap: 8 });
+}
+/** Music and sound volume, opened from the title or pause menu; BACK returns there. */
+function soundMenu(back) {
+  const levels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  return makeMenu([
+    { label: "MUSIC", values: levels, index: settings.music, onChange: (i) => { settings.music = i; setVolumes(settings.music, settings.sound); saveSettings(); } },
+    { label: "SOUND EFFECTS", values: levels, index: settings.sound, onChange: (i) => { settings.sound = i; setVolumes(settings.music, settings.sound); saveSettings(); sfx("hit-light", { vol: 0.6 }); } },
+    { label: "BACK", action: "back" },
+  ], { kind: back.kind, back, gap: back.gap });
 }
 function pauseMenu() {
   const items = [
     { label: "RESUME", action: "resume" },
     { label: scene === "match" ? "RESTART MATCH" : "RESET", action: "restart" },
+    { label: "SOUND", action: "sound" },
     { label: "MAIN MENU", action: "title" },
   ];
   // practice settings live here too, so they can be changed without a keyboard
@@ -142,6 +155,8 @@ function doAction(a) {
   if (a === "fight") startMatch();
   else if (a === "practice") startPractice();
   else if (a === "controls") showControls = true;
+  else if (a === "sound") { const back = menu; menu = soundMenu(back); menu.sel = 0; }
+  else if (a === "back") { const back = menu.back; back.items.forEach((it) => { if (it.label === "SOUND") back.sel = back.items.indexOf(it); }); menu = back; }
   else if (a === "resume") { menu = null; clearPressed(); }
   else if (a === "restart") { if (scene === "match") startMatch(); else startPractice(); }
   else if (a === "title") goTitle();
@@ -162,6 +177,7 @@ function landHit(att, def) {
   shake = Math.max(shake, (big ? 3.4 : 2.2) * r.pow);
   if (big || r.pow >= 1.5) { zoom = Math.max(zoom, r.kind === "ko" ? 0.14 : big ? 0.08 : 0.04); zoomAt = [hit.x, hit.y]; }
   spawnHit(hit.x, hit.y, r.pow, r.kind, att.sign);
+  hitSound(r, hit.x);
   if (r.kind !== "block") stage.impact(hit.x, hit.y, r.kind === "ko" ? 2.4 : r.kind === "kd" || r.kind === "break" ? Math.max(1.6, r.pow) : r.pow);
   if (r.kind === "ko") {
     koT = 0; koSlow = KO_SLOW; koFocus = def;
@@ -204,7 +220,32 @@ function stepMatch(dt) {
     }
   } else if (match.phase === "over") celebrate(match.winner);
 }
-function celebrate(w) { if (w && w.hp > 0 && !w.move && !w.air) startMove(w, "victory"); }
+function celebrate(w) { if (w && w.hp > 0 && !w.move && !w.air) { startMove(w, "victory"); sfx("victory", { vol: 0.7, x: w.x, vary: 0 }); } }
+
+// --- sounds for hits and for what the fighters do ---
+function hitSound(r, x) {
+  const o = (name, vol, rate = 1) => sfx(name, { vol, rate, x });
+  if (r.kind === "block") o("block", 0.55);
+  else if (r.kind === "break") { o("block", 0.8, 0.6); o("hit-heavy", 0.5, 1.2); duck(0.5, 0.3); }
+  else if (r.kind === "ko") { o("ko", 0.95); o("hit-heavy", 0.6, 0.55); duck(0.2, 0.6); }
+  else if (r.kind === "kd") { o("hit-heavy", 0.85); o("hit-heavy", 0.45, 0.6); duck(0.4, 0.35); }
+  else if (r.pow >= 1.5) { o("hit-heavy", 0.75); duck(0.55, 0.25); }
+  else o("hit-light", 0.45 + 0.15 * r.pow, 1.15 - 0.1 * r.pow);
+}
+// Whoosh pitch by attack: quick jabs swish high, the heavy kick swooshes low.
+const SWING = { jab: 1.35, cross: 1.2, upper: 1.0, kick: 1.0, low: 1.1, heavy: 0.78 };
+function eventSound(e, f) {
+  if (e.t === "swing") {
+    if (e.move.air) sfx("spin-attack", { vol: 0.45, x: e.x });
+    else sfx("whiff", { vol: 0.22 + 0.08 * e.move.pow, rate: SWING[e.move.name] || 1, x: e.x });
+  } else if (e.t === "step") {
+    if (time.wt - (f.stepSnd || 0) > 0.16) { f.stepSnd = time.wt; sfx("footstep", { vol: 0.1 + Math.min(0.12, e.v / 2500), x: e.x, vary: 0.12 }); }
+  } else if (e.t === "land" && !e.down) sfx("land", { vol: 0.2 + 0.25 * Math.min(1, e.v / 700), x: e.x });
+  else if (e.t === "slam") sfx("knockdown", { vol: 0.7, x: e.x });
+  else if (e.t === "roll") sfx("dodge", { vol: 0.5, x: e.x });
+  else if (e.t === "jump") sfx("jump", { vol: 0.35, x: e.x });
+  else if (e.t === "crouch") sfx("crouch", { vol: 0.22, x: e.x });
+}
 
 function step(dt) {
   time.wt += dt;
@@ -227,7 +268,7 @@ function step(dt) {
     for (const f of [P1, P2]) {
       for (const e of f.events) {
         if (e.t === "slam") { const h = toWorld(f, f.sol.head)[0], b = toWorld(f, f.sol.hip)[0]; e.x = (h + b) / 2; shake = Math.max(shake, 3); }
-        fighterEvent(e, f);
+        fighterEvent(e, f); eventSound(e, f);
       }
       f.events.length = 0;
     }
@@ -288,13 +329,14 @@ function render() {
     gr.addColorStop(0, "rgba(23,18,29,0.15)"); gr.addColorStop(0.5, "rgba(23,18,29,0.35)"); gr.addColorStop(1, "rgba(23,18,29,0.6)");
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     drawLogo(g, W / 2, 112, time.wt);
-    drawMenu(g, menu, W / 2, 232, time.wt);
+    drawMenu(g, menu, W / 2, 222, time.wt);
+    drawText(g, isMuted() ? "SOUND OFF  (M)" : "M: sound on/off", W - 14, H - 16, 12, "#fff8ec", "right", 4);
     if (showControls) drawControls(g);
     return;
   }
   drawHud(g, P1, P2, {
     scene, mode: MODES[mode], level: AI.level, stage: stage.name, slow, banner: banner(),
-    timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null, touch: touch.on,
+    timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null, touch: touch.on, muted: isMuted(),
   });
   if (menu) {
     const top = menu.kind === "pause" ? Math.max(150, 300 - menu.items.length * 30) : 300;
@@ -311,11 +353,12 @@ function frame(now) {
     let fdt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (take("KeyO")) slow = !slow;
+    if (take("KeyM")) toggleMute();
     if (take("Backquote")) showRig = !showRig;
     if (showControls) { if (anyPressed()) showControls = false; }
     else if (menu) {
       if (menu.kind === "pause" && take("Escape", "KeyP")) doAction("resume");
-      else doAction(menuKeys(menu));
+      else menuSounds(() => menuKeys(menu));
     } else if ((scene === "match" || scene === "practice") && (take("Escape", "KeyP") || isPortrait())) openPause();
     if (paused()) fdt = 0;
     if (koSlow > 0 && freeze <= 0) {
@@ -324,6 +367,10 @@ function frame(now) {
       const u = 1 - koSlow / KO_SLOW;
       fdt *= 0.18 + 0.82 * u * u;
     }
+    let speedNow = 1;
+    if (koSlow > 0 && freeze <= 0) speedNow = 0.18 + 0.82 * Math.pow(1 - koSlow / KO_SLOW, 2);
+    audioTick(Math.min(0.1, (now - (frame.prev || now)) / 1000), speedNow, scene === "title" ? "title" : paused() ? "pause" : "play");
+    frame.prev = now;
     acc += slow ? fdt * 0.25 : fdt;
     while (acc >= DT) { step(DT); acc -= DT; }
     render();
@@ -339,8 +386,19 @@ canvas.addEventListener("pointerdown", (e) => {
   if (showControls) { showControls = false; return; }
   if (!menu) return;
   const r = canvas.getBoundingClientRect();
-  doAction(menuPointer(menu, ((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H));
+  menuSounds(() => menuPointer(menu, ((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H));
 });
+
+/** Runs menu input, with a tick when the selection or a setting changes and a thump when something is chosen. */
+function menuSounds(read) {
+  const m = menu, key = () => m.sel + ":" + (m.items[m.sel].index ?? "");
+  const before = key(), a = read();
+  if (a) sfx("hit-light", { vol: 0.3, rate: 1.4, vary: 0.02 });
+  else if (key() !== before) sfx("whiff", { vol: 0.2, rate: 1.9, vary: 0.03 });
+  doAction(a);
+}
+// Browsers only allow sound after the first click, tap or key press.
+addEventListener("pointerdown", unlock); addEventListener("keydown", unlock);
 canvas.focus();
 document.getElementById("nojs")?.remove();
 initTouch(canvas, { active: () => !menu && !showControls && (scene === "match" || scene === "practice"), onPause: openPause });

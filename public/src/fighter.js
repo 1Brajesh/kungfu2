@@ -51,7 +51,7 @@ function endMove(f) {
   const m = f.move;
   f.blendFrom = wrapRot(f.pose); f.blendT = BLEND;
   f.move = null; f.last = { name: m.name, t: time.gt };
-  if (m.launch) { f.air = true; f.vy = JUMP_V; f.vx = f.jumpDir * JUMP_VX; }
+  if (m.launch) { f.air = true; f.vy = JUMP_V; f.vx = f.jumpDir * JUMP_VX; f.events.push({ t: "jump", x: f.x }); }
 }
 
 const isInvulnerable = (f) => f.move && f.move.inv && f.mt >= f.move.inv[0] && f.mt <= f.move.inv[1];
@@ -74,6 +74,7 @@ export function updateFighter(f, opp, dt, it) {
     if (m.slide) f.vx = f.mt < m.slide.until ? m.slide.v * f.slideSign : f.vx * Math.exp(-12 * dt);
     if (m.dive && !f.dived && f.mt >= m.dive) { f.dived = true; f.vy = -950; }
     if ((m.name === "knockdown" || m.name === "ko") && f.mt - dt < 0.44 && f.mt >= 0.44) f.events.push({ t: "slam" });
+    if (m.atk && f.mt - dt < m.active[0] && f.mt >= m.active[0]) f.events.push({ t: "swing", move: m, x: f.x + f.sign * 50 });
     if (!m.hold && f.mt >= m.len) endMove(f);
   }
 
@@ -108,6 +109,8 @@ export function updateFighter(f, opp, dt, it) {
   const blocking = free && it.block && (f.guard >= GUARD_MIN || f.bw > 0.5);
   const crouching = free && it.crouch && !blocking;
   f.blocking = blocking || (f.move && f.move.name === "blockHit");
+  if (crouching && !f.crouched) f.events.push({ t: "crouch", x: f.x });
+  f.crouched = crouching;
   const toward = (v, target, rate) => v + clamp(target - v, -rate * dt, rate * dt);
   f.cw = toward(f.cw, it.crouch && !blocking && !f.air && f.hp > 0 ? 1 : 0, 12);
   f.bw = toward(f.bw, blocking ? 1 : 0, 16);

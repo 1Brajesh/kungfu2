@@ -57,7 +57,7 @@ function roundRect(g, x, y, w, h, r) {
 
 /** Draws the menu as a column of buttons centred at cx, starting at y. */
 export function drawMenu(g, m, cx, y, wt) {
-  const bw = 330, bh = 40, gap = 10;
+  const bw = 330, bh = 40, gap = m.gap ?? 10;
   m.rects = [];
   m.items.forEach((it, i) => {
     const x = cx - bw / 2, yy = y + i * (bh + gap), on = i === m.sel;

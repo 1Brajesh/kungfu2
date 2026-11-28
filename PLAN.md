@@ -23,7 +23,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `fighter.js` | One fighter: actions, combos, jumping, rolling, footsteps, ribbons, health, guard, hit checks |
 | `draw.js` | Draws a fighter from its skeleton, plus the skeleton view |
 | `stage.js` | The temple courtyard, clouds, cherry trees, lanterns, petals |
-| `fx.js` | Hit stars, words, bits and motion streaks |
+| `fx.js` | Hit stars and words, flying bits, speed-line bursts, shock rings, dust, screen flash, strike streaks |
 | `input.js` | Keyboard |
 | `hud.js` | Health bars, guard meters, banners, the controls line |
 | `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
@@ -76,10 +76,18 @@ URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice 
 - It remembers what you use most: if you keep sweeping, it jumps in with the down smash more.
 - Tested by script: every level beats a player who does nothing, holds block or spams jabs. Easy loses to sweep spam and jump-kick spam. Normal and Hard beat jump-kick spam most of the time and break even against sweep spam.
 
+### Effects (step 3)
+- **Streaks:** punches leave comic speed lines above and below the arm; kicks leave a white crescent smear along the arc of the foot. They are drawn only while the strike goes out (from the chamber to the end of the strike window).
+- **Hits:** the freeze grows with the blow (0.05 s plus more for heavier hits; 0.14 s for knockdowns and guard breaks; 0.3 s for the K.O.). Big hits add radiating speed lines, a shock ring, a bigger word, a brief zoom toward the hit and a short white flash. Flying bits go the way the blow travelled.
+- **Dust:** fast footsteps, jump landings (more for higher falls), skidding back from a hit, rolls, and a big cloud when a knocked-down body hits the floor (with a small shake).
+- **K.O.:** after the impact freeze the game drops to about a fifth of normal speed and eases back over 1.8 s while the camera closes in on the falling fighter.
+- Fighters report events (step, land, skid, roll, slam) in `f.events`; the game loop turns them into dust, so `fighter.js` draws nothing itself.
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
-3. **Effects** ← *next*: motion streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
+3. **Effects** (done): streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
+   *Next: step 4, living backgrounds (or rounds and menus from step 5).*
 4. **Living backgrounds**: two or three stages (temple courtyard, bamboo forest, rooftop at night) with moving parts.
 5. **The computer opponent** (done, brought forward), then **rounds and menus** and touch controls for phones.
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.

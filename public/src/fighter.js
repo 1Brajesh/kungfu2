@@ -8,6 +8,7 @@ const BLEND = 0.1;             // s to blend out of a finished move
 const BUFFER = 0.32;           // s a button press waits for the fighter to be free
 const COMBO_GAP = 0.3;         // s after a punch ends in which the next punch still chains
 const ROLL_COOLDOWN = 1.0;
+export const TRAIL_LIFE = 0.13; // s a strike streak lasts
 const GUARD_COST = 3, CHIP = 0.2, GUARD_REGEN = 30, GUARD_REGEN_DELAY = 0.6, GUARD_MIN = 25;
 /** Moves in which the fighter slides from a hit instead of walking. */
 const KNOCKBACK = new Set(["hitHigh", "hitGut", "blockHit", "stagger", "knockdown", "ko"]);
@@ -28,7 +29,7 @@ export function resetFighter(f, x, sign) {
     pose: Object.assign({}, BASE), sol: null, hx: x, hy: GROUND - SC * STANCE.hipH,
     feet: [{ x: x + sign * SC * STANCE.front, step: null }, { x: x + sign * SC * STANCE.back, step: null }],
     rib: [{ n: 7, seg: 6, pts: null }, { n: 6, seg: 5.2, pts: null }],
-    trail: [],
+    trail: [], events: [], skidT: 0,
   });
   finishFighter(f, 0);
 }
@@ -72,6 +73,7 @@ export function updateFighter(f, opp, dt, it) {
     f.mt += dt;
     if (m.slide) f.vx = f.mt < m.slide.until ? m.slide.v * f.slideSign : f.vx * Math.exp(-12 * dt);
     if (m.dive && !f.dived && f.mt >= m.dive) { f.dived = true; f.vy = -950; }
+    if ((m.name === "knockdown" || m.name === "ko") && f.mt - dt < 0.44 && f.mt >= 0.44) f.events.push({ t: "slam" });
     if (!m.hold && f.mt >= m.len) endMove(f);
   }
 
@@ -96,7 +98,7 @@ export function updateFighter(f, opp, dt, it) {
     if (next) {
       f.buf = null;
       startMove(f, next);
-      if (next.startsWith("roll")) f.rollReady = time.gt + ROLL_COOLDOWN;
+      if (next.startsWith("roll")) { f.rollReady = time.gt + ROLL_COOLDOWN; f.events.push({ t: "roll", x: f.x, dir: next === "rollF" ? f.sign : -f.sign }); }
       if (next === "squat") f.jumpDir = it.dir;
     }
   }
@@ -115,7 +117,10 @@ export function updateFighter(f, opp, dt, it) {
   const mv = f.move;
   if (f.air) { /* keep momentum */ }
   else if (mv && mv.slide) { /* set above */ }
-  else if (mv && KNOCKBACK.has(mv.name)) f.vx *= Math.exp(-8 * dt);
+  else if (mv && KNOCKBACK.has(mv.name)) {
+    f.vx *= Math.exp(-8 * dt);
+    if (Math.abs(f.vx) > 120 && (f.skidT -= dt) <= 0) { f.skidT = 0.045; f.events.push({ t: "skid", x: f.x - f.sign * 20, dir: Math.sign(f.vx), v: Math.abs(f.vx) }); }
+  }
   else {
     const walk = free && !blocking && !crouching ? it.dir * (it.dir === f.sign ? WALK_FWD : WALK_BACK) * it.speed : 0;
     f.vx = toward(f.vx, walk, mv ? ACCEL * 2 : ACCEL);
@@ -127,6 +132,7 @@ export function updateFighter(f, opp, dt, it) {
     f.vy -= GRAVITY * dt;
     f.y += f.vy * dt;
     if (f.y <= 0) {
+      f.events.push({ t: "land", x: f.x, v: -f.vy, down: !!(f.move && (f.move.name === "knockdown" || f.move.name === "ko")) });
       f.y = 0; f.vy = 0; f.air = false; f.airAtk = false;
       if (!f.move || f.move.air) { if (f.move) f.move = null; startMove(f, "land"); f.vx *= 0.3; }
     }
@@ -180,7 +186,11 @@ export function finishFighter(f, dt) {
     ft.x = st.from + (st.to - st.from) * e;
     lift[i] = Math.sin(PI * st.u);
     bob = Math.max(bob, lift[i]);
-    if (st.u >= 1) ft.step = null;
+    if (st.u >= 1) {
+      ft.step = null;
+      const len = Math.abs(st.to - st.from);
+      if (dt > 0 && len > 18) f.events.push({ t: "step", x: ft.x, dir: Math.sign(st.to - st.from), v: len / st.dur });
+    }
   }
   if (dt > 0 && grounded) {
     const planted = (i) => ik[i] >= 0.5;
@@ -219,10 +229,12 @@ export function finishFighter(f, dt) {
 
   if (dt > 0) {
     f.rib.forEach((r, i) => updateRibbon(f, r, i, dt));
-    const limb = f.move && f.move.limb ? f.move.limb : "";
+    // The streak follows the striking fist (or the foot, once chambered) from just before its strike window to its end.
+    const m = f.move, striking = m && m.limb && f.mt >= m.active[0] - (m.limb.startsWith("fist") ? 0.1 : 0.04) && f.mt <= m.active[1];
+    const limb = m && m.limb ? m.name : "";
     if (limb !== f.trailLimb) { f.trail.length = 0; f.trailLimb = limb; }
-    if (limb) { const w = toWorld(f, LIMB[limb](s)); f.trail.push({ x: w[0], y: w[1], t: time.gt }); }
-    while (f.trail.length && time.gt - f.trail[0].t > 0.1) f.trail.shift();
+    if (striking) { const w = toWorld(f, LIMB[m.limb](s)); f.trail.push({ x: w[0], y: w[1], t: time.gt, w: m.pow || 1, fist: m.limb.startsWith("fist") }); }
+    while (f.trail.length && time.gt - f.trail[0].t > TRAIL_LIFE) f.trail.shift();
   } else f.rib.forEach((r, i) => { if (!r.pts) updateRibbon(f, r, i, 1 / 60); });
 }
 

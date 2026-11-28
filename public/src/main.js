@@ -2,9 +2,9 @@
 import { W, H, DT, PAL, params, time } from "./config.js";
 import { readP1, take } from "./input.js";
 import { makeFighter, resetFighter, updateFighter, resolveSpacing, finishFighter, checkHit, applyHit, toWorld, TRAIL_LIFE } from "./fighter.js";
-import { drawFighter, drawRibbons, drawShadow, drawRig, drawDizzy } from "./draw.js";
-import { drawStage, updatePetals, drawPetals } from "./stage.js";
-import { spawnHit, updateFx, drawFx, drawTrail, drawDust, drawFlash, fighterEvent, clearFx } from "./fx.js";
+import { drawFighter, drawRibbons, drawShadow, drawRig, drawDizzy, tintPal } from "./draw.js";
+import { STAGES } from "./stage.js";
+import { spawnHit, updateFx, drawFx, drawTrail, drawDust, drawFlash, fighterEvent, clearFx, setDustColors } from "./fx.js";
 import { hudTick, drawHud } from "./hud.js";
 import { makeAI, resetAI, aiIntent, LEVEL_NAMES } from "./ai.js";
 
@@ -26,6 +26,16 @@ const P1 = makeFighter("p1", START[0], PAL.white, 1);
 const P2 = makeFighter("p2", START[1], PAL.blue, -1); // computer opponent (or practice dummy)
 let paused = false, slow = params.has("slow"), showRig = params.has("rig");
 let freeze = 0, shake = 0, camX = 0, camY = 0, zoom = 0, zoomAt = [W / 2, H / 2];
+// --- stage: B switches; ?stage=bamboo picks one ---
+let stageI = Math.max(0, STAGES.findIndex((s) => s.id === params.get("stage")));
+let stage, pals;
+function setStage(i) {
+  stageI = (i + STAGES.length) % STAGES.length; stage = STAGES[stageI];
+  pals = new Map([[P1, tintPal(P1.pal, stage.tint)], [P2, tintPal(P2.pal, stage.tint)]]);
+  setDustColors(stage.dust[0], stage.dust[1]);
+}
+setStage(stageI);
+
 let koT = -1, koSlow = 0, koFocus = null, lastAttacker = P1;
 const KO_SLOW = 1.8; // s of real time the K.O. plays in slow motion
 
@@ -61,6 +71,7 @@ function landHit(att, def) {
   shake = Math.max(shake, (big ? 3.4 : 2.2) * r.pow);
   if (big || r.pow >= 1.5) { zoom = Math.max(zoom, r.kind === "ko" ? 0.14 : big ? 0.08 : 0.04); zoomAt = [hit.x, hit.y]; }
   spawnHit(hit.x, hit.y, r.pow, r.kind, att.sign);
+  if (r.kind !== "block") stage.impact(hit.x, hit.y, r.kind === "ko" ? 2.4 : r.kind === "kd" || r.kind === "break" ? Math.max(1.6, r.pow) : r.pow);
   if (r.kind === "ko") { koT = 0; koSlow = KO_SLOW; koFocus = def; }
 }
 
@@ -72,6 +83,7 @@ function resetRound() {
 function step(dt) {
   time.wt += dt;
   if (koT >= 0 && (koT += dt) > 3.2) resetRound();
+  if (take("KeyB")) setStage(stageI + 1);
   if (take("KeyT")) { mode = (mode + 1) % MODES.length; P2.homing = false; resetAI(AI); }
   LEVEL_NAMES.forEach((n, i) => { if (take("Digit" + (i + 1))) { AI.level = n; mode = 0; } });
   if (freeze > 0) freeze -= dt;
@@ -99,7 +111,7 @@ function step(dt) {
       zoomAt = [zoomAt[0] + (h[0] - zoomAt[0]) * Math.min(1, dt * 5), zoomAt[1] + (h[1] - 40 - zoomAt[1]) * Math.min(1, dt * 5)];
     } else zoom *= Math.exp(-dt * 3);
   }
-  updateFx(dt); updatePetals(dt); hudTick([P1, P2], dt);
+  updateFx(dt); stage.update(dt); hudTick([P1, P2], dt);
   shake *= Math.exp(-dt * 10);
   camX = (Math.random() - 0.5) * 2 * shake; camY = (Math.random() - 0.5) * 2 * shake;
 }
@@ -109,18 +121,18 @@ function render() {
   g.save();
   g.translate(camX, camY);
   if (zoom > 0.002) { const z = 1 + zoom; g.translate(zoomAt[0], zoomAt[1]); g.scale(z, z); g.translate(-zoomAt[0], -zoomAt[1]); }
-  drawStage(g);
-  drawShadow(g, P2); drawShadow(g, P1);
+  stage.back(g);
+  drawShadow(g, P2, stage.shadow); drawShadow(g, P1, stage.shadow);
   const order = lastAttacker === P1 ? [P2, P1] : [P1, P2];
-  for (const f of order) { drawTrail(g, f.trail, TRAIL_LIFE); drawRibbons(g, f); drawFighter(g, f); }
+  for (const f of order) { drawTrail(g, f.trail, TRAIL_LIFE); drawRibbons(g, f, pals.get(f)); drawFighter(g, f, pals.get(f)); }
   drawDust(g);
   for (const f of order) drawDizzy(g, f, time.wt);
   drawFx(g);
-  drawPetals(g);
+  stage.front(g);
   if (showRig) for (const f of order) drawRig(g, f);
   g.restore();
   drawFlash(g);
-  drawHud(g, P1, P2, { mode: MODES[mode], level: AI.level, paused, slow, banner: koT >= 0.15 ? "K.O.!" : "" });
+  drawHud(g, P1, P2, { mode: MODES[mode], level: AI.level, paused, slow, banner: koT >= 0.15 ? "K.O.!" : "", stage: stage.name });
 }
 
 let acc = 0, last = performance.now(), errShown = false;

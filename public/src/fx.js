@@ -6,7 +6,9 @@ import { circlePath, lineXY } from "./draw.js";
 let parts = [], dust = [], flash = 0;
 
 const WORDS = { block: "BLOCK!", break: "BREAK!", kd: "WHAM!", ko: "BAM!" };
-const DUST = "#f7eedb", DUST_EDGE = "#c8ad80";
+let DUST = "#f7eedb", DUST_EDGE = "#c8ad80";
+/** Each stage has its own dust colour. */
+export function setDustColors(fill, edge) { DUST = fill; DUST_EDGE = edge; }
 
 /** kind: hit, block, break, kd or ko (from applyHit). */
 export function spawnHit(x, y, pow, kind = "hit", dir = 1) {

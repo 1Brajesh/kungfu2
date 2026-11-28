@@ -106,14 +106,25 @@ function drawHead(g, s, p, light) {
   g.restore();
 }
 
-export function drawFighter(g, f) {
+/** The palette with every colour multiplied by a stage's light (null keeps it as it is). */
+export function tintPal(pal, tint) {
+  if (!tint) return pal;
+  const o = {};
+  for (const k in pal) {
+    const n = parseInt(pal[k].slice(1), 16), c = (v, m) => Math.min(255, Math.round(v * m)).toString(16).padStart(2, "0");
+    o[k] = "#" + c((n >> 16) & 255, tint[0]) + c((n >> 8) & 255, tint[1]) + c(n & 255, tint[2]);
+  }
+  return o;
+}
+
+export function drawFighter(g, f, pal = f.pal) {
   g.save();
   g.translate(f.hx, f.hy); g.scale(f.sign * SC, SC);
-  figure(g, f.sol, f.pal, [LIGHT[0] * f.sign, LIGHT[1]]);
+  figure(g, f.sol, pal, [LIGHT[0] * f.sign, LIGHT[1]]);
   g.restore();
 }
 
-export function drawRibbons(g, f) {
+export function drawRibbons(g, f, pal = f.pal) {
   for (const r of f.rib) {
     if (!r.pts) continue;
     const pts = r.pts;
@@ -124,17 +135,17 @@ export function drawRibbons(g, f) {
     };
     g.lineCap = "round"; g.lineJoin = "round";
     g.strokeStyle = OUT; g.lineWidth = 6.5; path(); g.stroke();
-    g.strokeStyle = f.pal.band; g.lineWidth = 3.8; path(); g.stroke();
+    g.strokeStyle = pal.band; g.lineWidth = 3.8; path(); g.stroke();
   }
 }
 
 /** Ground shadow under the body; wider when lying down, smaller when high in the air. */
-export function drawShadow(g, f) {
+export function drawShadow(g, f, col = "rgba(90,60,30,0.25)") {
   const s = f.sol;
   let lo = Infinity, hi = -Infinity;
   for (const pt of [s.hip, s.head, s.lF.toe, s.lB.toe, s.lF.knee, s.lB.knee]) { const x = toWorld(f, pt)[0]; lo = Math.min(lo, x); hi = Math.max(hi, x); }
   const k = Math.max(0.35, 1 - f.y / 220), cx = (lo + hi) / 2, rx = Math.max(42, (hi - lo) / 2 + 14) * k;
-  g.fillStyle = "rgba(90,60,30,0.25)";
+  g.fillStyle = col;
   g.beginPath(); g.ellipse(cx, GROUND + 4, rx, 7 * k, 0, 0, PI * 2); g.fill();
 }
 

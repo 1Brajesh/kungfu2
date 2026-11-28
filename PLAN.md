@@ -22,7 +22,9 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `rig.js` | Poses, moves (keyframes over time), the skeleton maths, leg bending |
 | `fighter.js` | One fighter: actions, combos, jumping, rolling, footsteps, ribbons, health, guard, hit checks |
 | `draw.js` | Draws a fighter from its skeleton, plus the skeleton view |
-| `stage.js` | The temple courtyard, clouds, cherry trees, lanterns, petals |
+| `stage.js` | The list of stages |
+| `stages/temple.js`, `bamboo.js`, `rooftop.js` | One stage each: background, foreground, moving scenery, reactions to big hits, the light on the fighters |
+| `stages/common.js` | Helpers the stages share (seeded random, hills, clouds, springs, falling leaves) |
 | `fx.js` | Hit stars and words, flying bits, speed-line bursts, shock rings, dust, screen flash, strike streaks |
 | `input.js` | Keyboard |
 | `hud.js` | Health bars, guard meters, banners, the controls line |
@@ -52,11 +54,12 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Flying kick / down smash (in the air) | K / J |
 | Computer opponent level: Easy / Normal / Hard | 1 / 2 / 3 |
 | Switch to the practice dummy and change what it does (stand, block, crouch, jump; back to Fight) | T |
+| Change stage | B |
 | Skeleton view | ` (backquote) |
 | Slow motion | O |
 | Pause | P or Esc |
 
-URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice dummy instead of the computer), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides).
+URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice dummy instead of the computer), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
 
 ### Fighting rules (step 2)
 - Health 100. Jab 6, cross 8, uppercut 12, kick 10, sweep 8, flying kick 14, down smash 16, heavy kick 20.
@@ -83,12 +86,18 @@ URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice 
 - **K.O.:** after the impact freeze the game drops to about a fifth of normal speed and eases back over 1.8 s while the camera closes in on the falling fighter.
 - Fighters report events (step, land, skid, roll, slam) in `f.events`; the game loop turns them into dust, so `fighter.js` draws nothing itself.
 
+### Stages (step 4)
+Each stage draws a background and a foreground, moves its own scenery, reacts to big hits, and sets the light on the fighters (a colour multiplier on their palettes), their shadow and the dust colour. B switches stage.
+- **Temple courtyard** (sunny): drifting clouds, swaying cherry trees and lanterns, falling petals. Birds sit on the top roof, peck now and then, fly off at a big hit and come back about five seconds later. Big hits also shake petals loose and swing the lanterns.
+- **Bamboo forest** (misty morning): three depths of bamboo sway in the wind, with a gust every 5–11 s that bends them all and blows the falling leaves sideways. Sunbeams pulse, mist drifts, grass tufts move, and two dark stalks frame the screen in front of the fighters. Big hits shake the stalks and drop a shower of leaves.
+- **Rooftop at night**: twinkling stars, a shooting star now and then, clouds crossing the moon, city windows switching on and off, fireworks going up behind the city, a string of glowing lanterns across the top that swings on big hits, and fireflies. The fighters are lit moonlight blue.
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
 3. **Effects** (done): streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
-   *Next: step 4, living backgrounds (or rounds and menus from step 5).*
-4. **Living backgrounds**: two or three stages (temple courtyard, bamboo forest, rooftop at night) with moving parts.
+4. **Living backgrounds** (done): temple courtyard, bamboo forest, rooftop at night, each with moving parts.
+   *Next: rounds and menus, then touch controls (the rest of step 5).*
 5. **The computer opponent** (done, brought forward), then **rounds and menus** and touch controls for phones.
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
 7. **Online play** through the original game's relay design.

@@ -39,7 +39,7 @@ export function drawHud(g, p1, p2, info) {
   }
   const what = info.mode === "Fight" ? `CPU: ${info.level}  (1 2 3)` : `Practice: ${info.mode}`;
   label(g, what, W / 2, y + 9, "center", 13);
-  label(g, "T: practice modes", W / 2, y + 28, "center", 11);
+  label(g, `T: practice modes   B: stage (${info.stage})`, W / 2, y + 28, "center", 11);
 
   const tag = info.banner || (!document.hasFocus() ? "CLICK TO PLAY" : info.paused ? "PAUSED" : info.slow ? "SLOW MOTION" : "");
   if (tag) {

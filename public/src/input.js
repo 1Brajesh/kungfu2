@@ -24,6 +24,12 @@ addEventListener("blur", () => held.clear());
 
 export const isDown = (...codes) => codes.some((c) => held.has(c));
 
+/** Forgets presses nobody has read yet (when switching between menus and play). */
+export function clearPressed() { pressed.clear(); }
+
+/** True (once) if any key was pressed. */
+export function anyPressed() { const had = pressed.size > 0; pressed.clear(); return had; }
+
 /** True once per press of any of the given keys. */
 export function take(...codes) {
   let hit = false;

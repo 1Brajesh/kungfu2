@@ -61,6 +61,8 @@ export const POSES = {
   // roll
   rollIn: { ...CROUCH, gs: 0.3 },
   tuck: { lean: 0.6, tilt: 0.3, ...TUCK },
+  // winning a round: front fist up, back hand on the hip, chin up
+  victory: { lean: -0.08, tilt: -0.2, aFs: 2.75, aFe: 0.35, aBs: -0.6, aBe: 1.6, hipDy: -2 },
 };
 
 export const P = (name, over) => Object.assign({}, BASE, POSES[name], over);
@@ -108,6 +110,7 @@ export const MOVES = {
     track: [k(0, "guard"), k(0.08, "hitBig", "out"), k(0.3, "stagger"), k(0.55, "stagger", "io", { lean: -0.05, tilt: 0.25 }), k(0.8, "stagger"), k(1.0, "guard")] },
   knockdown: { len: 1.8, inv: [0.25, 1.8], stepDur: 0.12,
     track: [k(0, "guard"), k(0.08, "hitBig", "out"), k(0.32, "fall"), k(0.48, "lying", "out"), k(1.05, "lying"), k(1.3, "sitUp"), k(1.55, "kneel"), k(1.8, "guard")] },
+  victory: { len: 0.45, hold: true, stepDur: 0.12, track: [k(0, "guard"), k(0.18, "victory", "io", { hipDy: 8 }), k(0.45, "victory", "out")] },
   ko: { len: 0.5, hold: true, inv: [0, 99], stepDur: 0.12,
     track: [k(0, "guard"), k(0.08, "hitBig", "out"), k(0.32, "fall"), k(0.5, "lying", "out")] },
 };

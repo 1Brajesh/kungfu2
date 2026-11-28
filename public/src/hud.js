@@ -28,32 +28,67 @@ export function hudTick(fs, dt) {
   }
 }
 
+function pip(g, x, y, on) {
+  g.fillStyle = OUT; g.beginPath(); g.arc(x, y, 8, 0, Math.PI * 2); g.fill();
+  g.fillStyle = on ? "#ffd93b" : "#4a3b46"; g.beginPath(); g.arc(x, y, 5.5, 0, Math.PI * 2); g.fill();
+  if (on) { g.fillStyle = "rgba(255,255,255,0.6)"; g.beginPath(); g.arc(x - 1.5, y - 1.5, 2, 0, Math.PI * 2); g.fill(); }
+}
+
+/** A big centred word that pops in: ROUND 1, FIGHT!, K.O.!, TIME!, YOU WIN! */
+function drawBanner(g, b) {
+  const size = b.small ? 40 : 64, t = Math.max(0, b.t);
+  const s = t < 0.12 ? 0.4 + (t / 0.12) * 0.85 : t < 0.25 ? 1.25 - ((t - 0.12) / 0.13) * 0.25 : 1;
+  g.save(); g.translate(W / 2, 180); g.scale(s, s); g.rotate(b.small ? 0 : -0.03);
+  g.font = `900 ${size}px "Arial Black", Impact, system-ui, sans-serif`;
+  g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
+  g.lineWidth = b.small ? 10 : 14; g.strokeStyle = OUT; g.strokeText(b.text, 0, 0);
+  g.fillStyle = "#c0392b"; g.fillText(b.text, 0, 5);
+  g.fillStyle = b.hot ? "#ff8a3d" : "#ffd93b"; g.fillText(b.text, 0, 0);
+  g.restore();
+}
+
+function footer(g, text, y) {
+  g.font = "600 12px system-ui, -apple-system, sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  const w = g.measureText(text).width + 24;
+  g.fillStyle = "rgba(29,22,34,0.55)"; g.fillRect(W / 2 - w / 2, y - 11, w, 22);
+  g.fillStyle = "#fff8ec"; g.fillText(text, W / 2, y);
+}
+
+/**
+ * info: scene, mode (practice opponent), level, stage, slow, banner {text, t, hot, small},
+ * timer (s, match only), wins [p1, p2] (match only).
+ */
 export function drawHud(g, p1, p2, info) {
   const bw = 360, y = 22;
-  for (const [f, x, flip, name] of [[p1, 24, false, "YOU"], [p2, W - 24 - bw, true, info.mode === "Fight" ? "CPU" : "PRACTICE"]]) {
+  const cpu = info.scene !== "practice" || info.mode === "CPU";
+  const names = ["YOU", cpu ? `CPU · ${info.level.toUpperCase()}` : "PRACTICE"];
+  if (info.scene === "demo") names[0] = "CPU";
+  [[p1, 24, false], [p2, W - 24 - bw, true]].forEach(([f, x, flip], i) => {
     const hp = f.hp / MAX_HP, col = hp > 0.5 ? "#53d769" : hp > 0.25 ? "#ffc53a" : "#ff4d4d";
     bar(g, x, y, bw, 18, hp, f.hpShown / MAX_HP, col, flip);
     const broken = f.move && f.move.name === "stagger";
     bar(g, flip ? x + bw - 220 : x, y + 26, 220, 6, f.guard / MAX_GUARD, null, broken ? "#ff8a3d" : "#8fd8ff", flip);
-    label(g, name, flip ? x + bw : x, y + 48, flip ? "right" : "left", 13);
-  }
-  const what = info.mode === "Fight" ? `CPU: ${info.level}  (1 2 3)` : `Practice: ${info.mode}`;
-  label(g, what, W / 2, y + 9, "center", 13);
-  label(g, `T: practice modes   B: stage (${info.stage})`, W / 2, y + 28, "center", 11);
+    label(g, names[i], flip ? x + bw : x, y + 48, flip ? "right" : "left", 13);
+    if (info.wins) for (let k = 0; k < 2; k++) pip(g, flip ? x + 12 + k * 22 : x + bw - 12 - k * 22, y + 48, info.wins[i] > k);
+  });
 
-  const tag = info.banner || (!document.hasFocus() ? "CLICK TO PLAY" : info.paused ? "PAUSED" : info.slow ? "SLOW MOTION" : "");
+  if (info.timer !== null && info.timer !== undefined) {
+    const cx = W / 2, low = info.timer <= 10;
+    g.fillStyle = OUT; g.beginPath(); g.roundRect(cx - 36, y - 8, 72, 50, 12); g.fill();
+    g.fillStyle = "#4a3b46"; g.beginPath(); g.roundRect(cx - 32, y - 4, 64, 42, 9); g.fill();
+    label(g, String(info.timer), cx, y + 18, "center", 28);
+    if (low) { g.fillStyle = "rgba(255,77,77,0.35)"; g.beginPath(); g.roundRect(cx - 32, y - 4, 64, 42, 9); g.fill(); }
+  } else if (info.scene === "practice") label(g, info.mode === "CPU" ? "PRACTICE" : `Opponent: ${info.mode}`, W / 2, y + 9, "center", 13);
+
+  if (info.banner) drawBanner(g, info.banner);
+  const tag = !document.hasFocus() ? "CLICK TO PLAY" : info.slow ? "SLOW MOTION" : "";
   if (tag) {
-    const size = info.banner ? 64 : 22;
-    g.font = info.banner ? `900 ${size}px "Arial Black", Impact, system-ui, sans-serif` : BIG;
-    g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
-    g.lineWidth = info.banner ? 12 : 5; g.strokeStyle = OUT; g.strokeText(tag, W / 2, info.banner ? 180 : 90);
-    g.fillStyle = "#ffd93b"; g.fillText(tag, W / 2, info.banner ? 180 : 90);
+    g.font = BIG; g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
+    g.lineWidth = 5; g.strokeStyle = OUT; g.strokeText(tag, W / 2, 100);
+    g.fillStyle = "#ffd93b"; g.fillText(tag, W / 2, 100);
   }
 
-  const text = "A/D walk   W jump   S crouch   J punch (×3 combo)   K kick   L heavy   S+K sweep   I block   U roll   in air: J / K";
-  g.font = "600 12px system-ui, -apple-system, sans-serif";
-  g.textAlign = "center"; g.textBaseline = "middle";
-  const w = g.measureText(text).width + 24;
-  g.fillStyle = "rgba(29,22,34,0.55)"; g.fillRect(W / 2 - w / 2, H - 32, w, 22);
-  g.fillStyle = "#fff8ec"; g.fillText(text, W / 2, H - 21);
+  if (info.scene === "practice") footer(g, `T opponent (${info.mode})    1 2 3 CPU level    B stage (${info.stage})    Esc menu`, H - 47);
+  footer(g, "A/D walk   W jump   S crouch   J punch (×3 combo)   K kick   L heavy   S+K sweep   I block   U roll   in air: J / K", H - 21);
 }

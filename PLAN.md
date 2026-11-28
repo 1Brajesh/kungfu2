@@ -28,8 +28,9 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `fx.js` | Hit stars and words, flying bits, speed-line bursts, shock rings, dust, screen flash, strike streaks |
 | `input.js` | Keyboard |
 | `hud.js` | Health bars, guard meters, banners, the controls line |
+| `menu.js` | Title, pause and match-over menus (keys, mouse and touch), the logo, the controls card |
 | `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
-| `main.js` | The game loop, hit-freeze, shake and zoom, K.O. and reset, the opponent (computer or practice dummy) |
+| `main.js` | The game loop, the screens (title, match, practice), rounds and timer, hit-freeze, shake and zoom, K.O. |
 
 ### How the fighters move
 - Each fighter is a **jointed skeleton**: hip, torso, head, two arms and two legs. Angles are measured from straight down, and + means toward the opponent.
@@ -52,14 +53,14 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Block (hold; wears the guard meter down) | I |
 | Roll (through the opponent if you hold toward them, otherwise away) | U |
 | Flying kick / down smash (in the air) | K / J |
-| Computer opponent level: Easy / Normal / Hard | 1 / 2 / 3 |
-| Switch to the practice dummy and change what it does (stand, block, crouch, jump; back to Fight) | T |
-| Change stage | B |
+| Pause menu (resume, restart, main menu) | Esc or P |
+| *Practice only:* change what the opponent does (stand, block, crouch, jump, CPU) | T |
+| *Practice only:* CPU level Easy / Normal / Hard | 1 / 2 / 3 |
+| *Practice only:* change stage | B |
 | Skeleton view | ` (backquote) |
 | Slow motion | O |
-| Pause | P or Esc |
 
-URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice dummy instead of the computer), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
+URL options for testing: `?rig` (skeleton on), `?slow`, `?fight` (skip the title, straight into a match), `?mode=Block` (straight into practice; Stand, Block, Crouch, Jump or CPU), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
 
 ### Fighting rules (step 2)
 - Health 100. Jab 6, cross 8, uppercut 12, kick 10, sweep 8, flying kick 14, down smash 16, heavy kick 20.
@@ -92,13 +93,18 @@ Each stage draws a background and a foreground, moves its own scenery, reacts to
 - **Bamboo forest** (misty morning): three depths of bamboo sway in the wind, with a gust every 5–11 s that bends them all and blows the falling leaves sideways. Sunbeams pulse, mist drifts, grass tufts move, and two dark stalks frame the screen in front of the fighters. Big hits shake the stalks and drop a shower of leaves.
 - **Rooftop at night**: twinkling stars, a shooting star now and then, clouds crossing the moon, city windows switching on and off, fireworks going up behind the city, a string of glowing lanterns across the top that swings on big hits, and fireflies. The fighters are lit moonlight blue.
 
+### Screens, rounds and menus
+- **Title:** the logo over two computer fighters sparring on the chosen stage. Menu: Fight, Practice, CPU level, Stage (or Random), Controls. Arrow keys or W/S to move, A/D or ←/→ to change, Enter/Space/J to pick; mouse clicks and taps work too (left or right half of a choice goes back or forward). The level and stage are remembered in the browser.
+- **Match:** best of 3 rounds against the computer. Each round opens with ROUND 1 (or FINAL ROUND at one win each) and FIGHT!, and lasts 60 s. A K.O. wins the round; at time up the fighter with more health wins, and equal health is a draw that counts for neither. The round winner strikes a victory pose. Round wins show as dots by the health bars. After the match: YOU WIN! or YOU LOSE with Rematch and Main menu.
+- **Practice:** no timer or rounds; a K.O. starts again. T, 1/2/3 and B work here only.
+- **Pause** (Esc or P in a match or practice): Resume, Restart, Main menu.
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
 3. **Effects** (done): streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
 4. **Living backgrounds** (done): temple courtyard, bamboo forest, rooftop at night, each with moving parts.
-   *Next: rounds and menus, then touch controls (the rest of step 5).*
-5. **The computer opponent** (done, brought forward), then **rounds and menus** and touch controls for phones.
+5. **The computer opponent** (done, brought forward), **rounds and menus** (done), then **touch controls for phones** ← *next*.
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
 7. **Online play** through the original game's relay design.
 

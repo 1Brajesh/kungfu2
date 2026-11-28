@@ -1,12 +1,17 @@
-// Game loop: fixed 60 Hz updates, drawing every screen frame.
+// Game loop (fixed 60 Hz updates, drawing every screen frame) and the flow between screens:
+//   title    two computer fighters spar behind the logo and the menu
+//   match    you against the computer: best of 3 rounds, 60 s each
+//   practice you against a practice dummy (or the computer), no rounds; T, 1/2/3 and B change things
+//   demo     (?demo) the computer plays both sides, for testing
 import { W, H, DT, PAL, params, time } from "./config.js";
-import { readP1, take } from "./input.js";
-import { makeFighter, resetFighter, updateFighter, resolveSpacing, finishFighter, checkHit, applyHit, toWorld, TRAIL_LIFE } from "./fighter.js";
+import { readP1, take, clearPressed, anyPressed } from "./input.js";
+import { makeFighter, resetFighter, updateFighter, resolveSpacing, finishFighter, checkHit, applyHit, startMove, toWorld, TRAIL_LIFE } from "./fighter.js";
 import { drawFighter, drawRibbons, drawShadow, drawRig, drawDizzy, tintPal } from "./draw.js";
 import { STAGES } from "./stage.js";
 import { spawnHit, updateFx, drawFx, drawTrail, drawDust, drawFlash, fighterEvent, clearFx, setDustColors } from "./fx.js";
 import { hudTick, drawHud } from "./hud.js";
 import { makeAI, resetAI, aiIntent, LEVEL_NAMES } from "./ai.js";
+import { makeMenu, menuKeys, menuPointer, drawMenu, drawLogo, drawControls, dim, drawText } from "./menu.js";
 
 const canvas = document.getElementById("game");
 const g = canvas.getContext("2d");
@@ -21,29 +26,37 @@ function fit() {
 addEventListener("resize", fit);
 fit();
 
+// --- settings, remembered between visits ---
+const settings = { level: "Normal", stage: "temple" };
+try { Object.assign(settings, JSON.parse(localStorage.getItem("kf2.settings") || "{}")); } catch { /* private mode */ }
+const saveSettings = () => { try { localStorage.setItem("kf2.settings", JSON.stringify(settings)); } catch { /* ignore */ } };
+if (!LEVEL_NAMES.includes(settings.level)) settings.level = "Normal";
+if (LEVEL_NAMES.includes(params.get("level"))) settings.level = params.get("level");
+
 const START = [330, 630];
 const P1 = makeFighter("p1", START[0], PAL.white, 1);
-const P2 = makeFighter("p2", START[1], PAL.blue, -1); // computer opponent (or practice dummy)
-let paused = false, slow = params.has("slow"), showRig = params.has("rig");
+const P2 = makeFighter("p2", START[1], PAL.blue, -1);
+let slow = params.has("slow"), showRig = params.has("rig");
 let freeze = 0, shake = 0, camX = 0, camY = 0, zoom = 0, zoomAt = [W / 2, H / 2];
-// --- stage: B switches; ?stage=bamboo picks one ---
-let stageI = Math.max(0, STAGES.findIndex((s) => s.id === params.get("stage")));
-let stage, pals;
+
+// --- stage ---
+let stageI = 0, stage, pals;
 function setStage(i) {
   stageI = (i + STAGES.length) % STAGES.length; stage = STAGES[stageI];
   pals = new Map([[P1, tintPal(P1.pal, stage.tint)], [P2, tintPal(P2.pal, stage.tint)]]);
   setDustColors(stage.dust[0], stage.dust[1]);
 }
-setStage(stageI);
+const stageIndex = (id) => (id === "random" ? Math.floor(Math.random() * STAGES.length) : Math.max(0, STAGES.findIndex((s) => s.id === id)));
+setStage(stageIndex(params.get("stage") || settings.stage));
 
 let koT = -1, koSlow = 0, koFocus = null, lastAttacker = P1;
 const KO_SLOW = 1.8; // s of real time the K.O. plays in slow motion
 
-// --- opponent: "Fight" is the computer opponent; the rest are practice-dummy behaviours ---
-const MODES = ["Fight", "Stand", "Block", "Crouch", "Jump"];
-let mode = Math.max(0, MODES.indexOf(params.get("mode") || "Fight"));
-const AI1 = params.has("demo") ? makeAI(LEVEL_NAMES.includes(params.get("demo")) ? params.get("demo") : "Normal") : null; // ?demo: the computer plays both sides
-const AI = makeAI(LEVEL_NAMES.includes(params.get("level")) ? params.get("level") : "Normal");
+// --- who controls the fighters ---
+const AI = makeAI(settings.level);    // the computer opponent (P2)
+const AI1 = makeAI("Normal");          // plays P1 on the title screen and in ?demo
+const MODES = ["Stand", "Block", "Crouch", "Jump", "CPU"]; // practice opponent
+let mode = 0;
 P2.nextJump = 0;
 function dummyIntent(f) {
   const it = { dir: 0, speed: 0.55, crouch: false, block: false };
@@ -59,6 +72,74 @@ function dummyIntent(f) {
   return it;
 }
 
+// --- scenes ---
+const ROUND_TIME = 60, WINS_NEEDED = 2;
+let scene = "title", menu = null, showControls = false;
+/** phase: intro (ROUND n / FIGHT!), fight, end (K.O. or time up), over (match result) */
+const match = { round: 1, wins: [0, 0], phase: "intro", t: 0, timer: ROUND_TIME, winner: null, why: "" };
+
+function resetFighters() {
+  resetFighter(P1, START[0], 1); resetFighter(P2, START[1], -1);
+  P2.homing = false; koT = -1; koSlow = 0; koFocus = null; zoom = 0; freeze = 0; clearFx(); resetAI(AI); resetAI(AI1);
+}
+
+function startRound() {
+  resetFighters();
+  Object.assign(match, { phase: "intro", t: 0, timer: ROUND_TIME, winner: null, why: "" });
+}
+function startMatch() {
+  scene = "match"; menu = null; clearPressed();
+  AI.level = settings.level;
+  setStage(stageIndex(settings.stage));
+  match.round = 1; match.wins = [0, 0];
+  startRound();
+}
+function startPractice() {
+  scene = "practice"; menu = null; clearPressed();
+  AI.level = settings.level; mode = 0;
+  setStage(stageIndex(settings.stage));
+  resetFighters();
+}
+function goTitle() {
+  scene = "title"; clearPressed(); showControls = false;
+  setStage(stageIndex(settings.stage));
+  resetFighters();
+  menu = titleMenu();
+}
+
+const STAGE_IDS = [...STAGES.map((s) => s.id), "random"];
+const STAGE_NAMES = [...STAGES.map((s) => s.name), "Random"];
+function titleMenu() {
+  return makeMenu([
+    { label: "FIGHT", action: "fight" },
+    { label: "PRACTICE", action: "practice" },
+    { label: "CPU LEVEL", values: LEVEL_NAMES, index: LEVEL_NAMES.indexOf(settings.level),
+      onChange: (i) => { settings.level = LEVEL_NAMES[i]; saveSettings(); } },
+    { label: "STAGE", values: STAGE_NAMES, index: Math.max(0, STAGE_IDS.indexOf(settings.stage)),
+      onChange: (i) => { settings.stage = STAGE_IDS[i]; saveSettings(); if (STAGE_IDS[i] !== "random") setStage(i); } },
+    { label: "CONTROLS", action: "controls" },
+  ], { kind: "title" });
+}
+const pauseMenu = () => makeMenu([
+  { label: "RESUME", action: "resume" },
+  { label: scene === "match" ? "RESTART MATCH" : "RESET", action: "restart" },
+  { label: "MAIN MENU", action: "title" },
+], { kind: "pause" });
+const overMenu = () => makeMenu([{ label: "REMATCH", action: "fight" }, { label: "MAIN MENU", action: "title" }], { kind: "over" });
+
+function doAction(a) {
+  if (!a) return;
+  if (a === "fight") startMatch();
+  else if (a === "practice") startPractice();
+  else if (a === "controls") showControls = true;
+  else if (a === "resume") { menu = null; clearPressed(); }
+  else if (a === "restart") { if (scene === "match") startMatch(); else startPractice(); }
+  else if (a === "title") goTitle();
+}
+
+const paused = () => !!menu && menu.kind === "pause";
+
+// --- hits ---
 // Hit-freeze (s) by what happened; normal hits add more for heavier blows.
 const FREEZE = { hit: 0.05, block: 0.05, break: 0.14, kd: 0.14, ko: 0.3 };
 function landHit(att, def) {
@@ -72,26 +153,64 @@ function landHit(att, def) {
   if (big || r.pow >= 1.5) { zoom = Math.max(zoom, r.kind === "ko" ? 0.14 : big ? 0.08 : 0.04); zoomAt = [hit.x, hit.y]; }
   spawnHit(hit.x, hit.y, r.pow, r.kind, att.sign);
   if (r.kind !== "block") stage.impact(hit.x, hit.y, r.kind === "ko" ? 2.4 : r.kind === "kd" || r.kind === "break" ? Math.max(1.6, r.pow) : r.pow);
-  if (r.kind === "ko") { koT = 0; koSlow = KO_SLOW; koFocus = def; }
+  if (r.kind === "ko") {
+    koT = 0; koSlow = KO_SLOW; koFocus = def;
+    if (scene === "match" && match.phase === "fight") endRound(att, "ko");
+  }
 }
 
-function resetRound() {
-  resetFighter(P1, START[0], 1); resetFighter(P2, START[1], -1);
-  P2.homing = false; koT = -1; koSlow = 0; koFocus = null; clearFx(); resetAI(AI); if (AI1) resetAI(AI1);
+function endRound(winner, why) {
+  match.phase = "end"; match.t = 0; match.winner = winner; match.why = why;
+  if (winner) match.wins[winner === P1 ? 0 : 1]++;
 }
+
+const IDLE = { dir: 0, speed: 1 };
+function intents() {
+  if (scene === "title" || scene === "demo") {
+    return koT >= 0 ? [IDLE, IDLE] : [aiIntent(P1, P2, AI1), aiIntent(P2, P1, AI)];
+  }
+  const live = scene === "practice" ? koT < 0 : match.phase === "fight";
+  const i1 = live ? readP1() : IDLE;
+  if (!live) return [i1, IDLE];
+  if (scene === "practice" && MODES[mode] !== "CPU") return [i1, dummyIntent(P2)];
+  return [i1, aiIntent(P2, P1, AI)];
+}
+
+function stepMatch(dt) {
+  match.t += dt;
+  if (match.phase === "intro" && match.t >= 1.7) { match.phase = "fight"; match.t = 0; }
+  else if (match.phase === "fight" && freeze <= 0) {
+    match.timer = Math.max(0, match.timer - dt);
+    if (match.timer <= 0) {
+      const w = P1.hp > P2.hp ? P1 : P2.hp > P1.hp ? P2 : null;
+      endRound(w, "time");
+    }
+  } else if (match.phase === "end") {
+    // the winner celebrates once things have settled
+    if (match.t > (match.why === "ko" ? 1.6 : 1.2)) celebrate(match.winner);
+    if (match.t > (match.why === "ko" ? 3.6 : 3.0)) {
+      if (match.wins.some((n) => n >= WINS_NEEDED)) { match.phase = "over"; match.t = 0; menu = overMenu(); clearPressed(); }
+      else { match.round++; startRound(); }
+    }
+  } else if (match.phase === "over") celebrate(match.winner);
+}
+function celebrate(w) { if (w && w.hp > 0 && !w.move && !w.air) startMove(w, "victory"); }
 
 function step(dt) {
   time.wt += dt;
-  if (koT >= 0 && (koT += dt) > 3.2) resetRound();
-  if (take("KeyB")) setStage(stageI + 1);
-  if (take("KeyT")) { mode = (mode + 1) % MODES.length; P2.homing = false; resetAI(AI); }
-  LEVEL_NAMES.forEach((n, i) => { if (take("Digit" + (i + 1))) { AI.level = n; mode = 0; } });
+  if (koT >= 0) koT += dt;
+  if (scene === "match") stepMatch(dt);
+  else if (koT > 3.2) resetFighters(); // practice, title, demo: just start again
+  if (scene === "practice" && !menu) {
+    if (take("KeyB")) setStage(stageI + 1);
+    if (take("KeyT")) { mode = (mode + 1) % MODES.length; P2.homing = false; resetAI(AI); }
+    LEVEL_NAMES.forEach((n, i) => { if (take("Digit" + (i + 1))) { AI.level = n; mode = MODES.indexOf("CPU"); } });
+  }
   if (freeze > 0) freeze -= dt;
   else {
     time.gt += dt;
-    const i1 = koT >= 0 ? { dir: 0, speed: 1 } : AI1 ? aiIntent(P1, P2, AI1) : readP1();
+    const [i1, i2] = intents();
     updateFighter(P1, P2, dt, i1);
-    const i2 = koT >= 0 ? { dir: 0, speed: 1 } : MODES[mode] === "Fight" ? aiIntent(P2, P1, AI) : dummyIntent(P2);
     updateFighter(P2, P1, dt, i2);
     resolveSpacing(P1, P2);
     finishFighter(P1, dt); finishFighter(P2, dt);
@@ -102,8 +221,7 @@ function step(dt) {
       }
       f.events.length = 0;
     }
-    landHit(P1, P2);
-    landHit(P2, P1);
+    if (scene !== "match" || match.phase === "fight") { landHit(P1, P2); landHit(P2, P1); }
     if (koFocus && koSlow > 0) {
       // follow the falling fighter in close-up while the K.O. plays slowly
       const h = toWorld(koFocus, koFocus.sol.hip);
@@ -114,6 +232,28 @@ function step(dt) {
   updateFx(dt); stage.update(dt); hudTick([P1, P2], dt);
   shake *= Math.exp(-dt * 10);
   camX = (Math.random() - 0.5) * 2 * shake; camY = (Math.random() - 0.5) * 2 * shake;
+}
+
+// --- what the HUD shows ---
+function banner() {
+  if (scene === "title") return null;
+  if (scene === "match") {
+    const m = match;
+    if (m.phase === "intro") {
+      const final = m.wins[0] === WINS_NEEDED - 1 && m.wins[1] === WINS_NEEDED - 1;
+      return m.t < 1.05 ? { text: final ? "FINAL ROUND" : `ROUND ${m.round}`, t: m.t } : { text: "FIGHT!", t: m.t - 1.05, hot: true };
+    }
+    if (m.phase === "fight" && m.t < 0.45 && m.round) return { text: "FIGHT!", t: m.t + 0.65, hot: true };
+    if (m.phase === "end") {
+      const first = m.why === "ko" ? "K.O.!" : "TIME!";
+      if (m.t < 1.5) return m.t > 0.1 ? { text: first, t: m.t - 0.1 } : null;
+      const who = !m.winner ? "DRAW" : m.winner === P1 ? "YOU WIN THE ROUND" : "CPU WINS THE ROUND";
+      return { text: who, t: m.t - 1.5, small: true };
+    }
+    if (m.phase === "over") return { text: m.winner === P1 ? "YOU WIN!" : "YOU LOSE", t: m.t, hot: m.winner === P1 };
+    return null;
+  }
+  return koT >= 0.15 ? { text: "K.O.!", t: koT - 0.15 } : null;
 }
 
 function render() {
@@ -132,19 +272,41 @@ function render() {
   if (showRig) for (const f of order) drawRig(g, f);
   g.restore();
   drawFlash(g);
-  drawHud(g, P1, P2, { mode: MODES[mode], level: AI.level, paused, slow, banner: koT >= 0.15 ? "K.O.!" : "", stage: stage.name });
+
+  if (scene === "title") {
+    const gr = g.createLinearGradient(0, 0, 0, H);
+    gr.addColorStop(0, "rgba(23,18,29,0.15)"); gr.addColorStop(0.5, "rgba(23,18,29,0.35)"); gr.addColorStop(1, "rgba(23,18,29,0.6)");
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    drawLogo(g, W / 2, 112, time.wt);
+    drawMenu(g, menu, W / 2, 232, time.wt);
+    if (showControls) drawControls(g);
+    return;
+  }
+  drawHud(g, P1, P2, {
+    scene, mode: MODES[mode], level: AI.level, stage: stage.name, slow, banner: banner(),
+    timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null,
+  });
+  if (menu) {
+    if (menu.kind === "pause") { dim(g, 0.5); drawText(g, "PAUSED", W / 2, 150, 44, "#ffd93b", "center", 10); }
+    drawMenu(g, menu, W / 2, menu.kind === "over" ? 300 : 210, time.wt);
+  }
 }
 
+// --- the loop ---
 let acc = 0, last = performance.now(), errShown = false;
 function frame(now) {
   requestAnimationFrame(frame); // schedule first so one bad frame can't stop the game
   try {
-    if (take("KeyP", "Escape")) paused = !paused;
-    if (take("KeyO")) slow = !slow;
-    if (take("Backquote")) showRig = !showRig;
     let fdt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (paused) fdt = 0;
+    if (take("KeyO")) slow = !slow;
+    if (take("Backquote")) showRig = !showRig;
+    if (showControls) { if (anyPressed()) showControls = false; }
+    else if (menu) {
+      if (menu.kind === "pause" && take("Escape", "KeyP")) doAction("resume");
+      else doAction(menuKeys(menu));
+    } else if ((scene === "match" || scene === "practice") && take("Escape", "KeyP")) { menu = pauseMenu(); clearPressed(); }
+    if (paused()) fdt = 0;
     if (koSlow > 0 && freeze <= 0) {
       // after the impact freeze: very slow at first, easing back to full speed
       koSlow = Math.max(0, koSlow - fdt);
@@ -159,11 +321,34 @@ function frame(now) {
     if (!errShown) { errShown = true; console.error(e); }
   }
 }
-requestAnimationFrame(frame);
+
 canvas.tabIndex = 0;
-canvas.addEventListener("pointerdown", () => { canvas.focus(); window.focus(); });
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.focus(); window.focus();
+  if (showControls) { showControls = false; return; }
+  if (!menu) return;
+  const r = canvas.getBoundingClientRect();
+  doAction(menuPointer(menu, ((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H));
+});
 canvas.focus();
 document.getElementById("nojs")?.remove();
 
+// Where to start. ?demo: computer vs computer; ?mode=Block (or Stand, Crouch, Jump, CPU): practice; ?fight: straight into a match.
+if (params.has("demo")) {
+  scene = "demo";
+  if (LEVEL_NAMES.includes(params.get("demo"))) AI1.level = params.get("demo");
+  resetFighters();
+} else if (params.has("mode")) {
+  startPractice();
+  mode = Math.max(0, MODES.indexOf(params.get("mode") === "Fight" ? "CPU" : params.get("mode")));
+} else if (params.has("fight")) startMatch();
+else goTitle();
+if (params.has("stage")) setStage(stageIndex(params.get("stage")));
+requestAnimationFrame(frame);
+
 // Test hook for screenshot scripts.
-window.__kf = { P1, P2, AI, AI1, time, step, reset: resetRound, setMode: (m) => { mode = MODES.indexOf(m); } };
+window.__kf = {
+  P1, P2, AI, AI1, time, step, match, reset: resetFighters, startMatch, goTitle, doAction,
+  setMode: (m) => { mode = Math.max(0, MODES.indexOf(m === "Fight" ? "CPU" : m)); },
+  get scene() { return scene; }, get menu() { return menu; },
+};

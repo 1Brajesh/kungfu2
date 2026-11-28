@@ -26,7 +26,8 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `fx.js` | Hit stars, words, bits and motion streaks |
 | `input.js` | Keyboard |
 | `hud.js` | Health bars, guard meters, banners, the controls line |
-| `main.js` | The game loop, hit-freeze, shake and zoom, K.O. and reset, the practice opponent |
+| `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
+| `main.js` | The game loop, hit-freeze, shake and zoom, K.O. and reset, the opponent (computer or practice dummy) |
 
 ### How the fighters move
 - Each fighter is a **jointed skeleton**: hip, torso, head, two arms and two legs. Angles are measured from straight down, and + means toward the opponent.
@@ -49,12 +50,13 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Block (hold; wears the guard meter down) | I |
 | Roll (through the opponent if you hold toward them, otherwise away) | U |
 | Flying kick / down smash (in the air) | K / J |
-| Change what the practice opponent does (stand, block, crouch, jump) | T |
+| Computer opponent level: Easy / Normal / Hard | 1 / 2 / 3 |
+| Switch to the practice dummy and change what it does (stand, block, crouch, jump; back to Fight) | T |
 | Skeleton view | ` (backquote) |
 | Slow motion | O |
 | Pause | P or Esc |
 
-URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice opponent's behaviour).
+URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice dummy instead of the computer), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides).
 
 ### Fighting rules (step 2)
 - Health 100. Jab 6, cross 8, uppercut 12, kick 10, sweep 8, flying kick 14, down smash 16, heavy kick 20.
@@ -65,12 +67,21 @@ URL options for testing: `?rig` (skeleton on), `?slow`, `?mode=Block` (practice 
 - Hits are checked along the whole path the fist or foot moved in each update, so fast strikes can't skip through a limb.
 - K.O.: slow motion, a banner, and the round resets after 3 seconds.
 
+### The computer opponent
+- It presses the same buttons a player does (it returns the same intent as the keyboard), so it follows every rule: button buffer, combo timing, roll cooldown, guard meter.
+- It sees you a moment late (Easy 0.4 s, Normal 0.26 s, Hard 0.17 s). It can't react to a jab in time, so it guards ahead of time when you are close, and reacts to slower attacks (heavy kick, jump-ins).
+- It knows the measured reach of every attack against a standing and a crouching fighter, and judges distance with some error (more on Easy), so it sometimes swings from too far.
+- It walks to a spacing it picks, steps in with combos or kicks, sweeps a blocker, kicks or down-smashes a croucher, jumps in, backs off when its guard is low, and rolls out of a corner.
+- It hits back when you miss, land from a jump or have your guard broken. On Hard it finishes combos only when the first hit lands, and links a kick into the heavy kick.
+- It remembers what you use most: if you keep sweeping, it jumps in with the down smash more.
+- Tested by script: every level beats a player who does nothing, holds block or spams jabs. Easy loses to sweep spam and jump-kick spam. Normal and Hard beat jump-kick spam most of the time and break even against sweep spam.
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
 3. **Effects** ← *next*: motion streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
 4. **Living backgrounds**: two or three stages (temple courtyard, bamboo forest, rooftop at night) with moving parts.
-5. **The computer opponent, rounds and menus**, ported from the original's ideas, along with touch controls for phones.
+5. **The computer opponent** (done, brought forward), then **rounds and menus** and touch controls for phones.
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
 7. **Online play** through the original game's relay design.
 

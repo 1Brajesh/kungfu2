@@ -30,14 +30,16 @@ export function hudTick(fs, dt) {
 
 export function drawHud(g, p1, p2, info) {
   const bw = 360, y = 22;
-  for (const [f, x, flip, name] of [[p1, 24, false, "YOU"], [p2, W - 24 - bw, true, "PRACTICE"]]) {
+  for (const [f, x, flip, name] of [[p1, 24, false, "YOU"], [p2, W - 24 - bw, true, info.mode === "Fight" ? "CPU" : "PRACTICE"]]) {
     const hp = f.hp / MAX_HP, col = hp > 0.5 ? "#53d769" : hp > 0.25 ? "#ffc53a" : "#ff4d4d";
     bar(g, x, y, bw, 18, hp, f.hpShown / MAX_HP, col, flip);
     const broken = f.move && f.move.name === "stagger";
     bar(g, flip ? x + bw - 220 : x, y + 26, 220, 6, f.guard / MAX_GUARD, null, broken ? "#ff8a3d" : "#8fd8ff", flip);
     label(g, name, flip ? x + bw : x, y + 48, flip ? "right" : "left", 13);
   }
-  label(g, `Opponent: ${info.mode}  (T)`, W / 2, y + 9, "center", 13);
+  const what = info.mode === "Fight" ? `CPU: ${info.level}  (1 2 3)` : `Practice: ${info.mode}`;
+  label(g, what, W / 2, y + 9, "center", 13);
+  label(g, "T: practice modes", W / 2, y + 28, "center", 11);
 
   const tag = info.banner || (!document.hasFocus() ? "CLICK TO PLAY" : info.paused ? "PAUSED" : info.slow ? "SLOW MOTION" : "");
   if (tag) {

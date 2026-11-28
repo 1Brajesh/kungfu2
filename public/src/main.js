@@ -6,6 +6,7 @@ import { drawFighter, drawRibbons, drawShadow, drawRig, drawDizzy } from "./draw
 import { drawStage, updatePetals, drawPetals } from "./stage.js";
 import { spawnHit, updateFx, drawFx, drawTrail, clearFx } from "./fx.js";
 import { hudTick, drawHud } from "./hud.js";
+import { makeAI, resetAI, aiIntent, LEVEL_NAMES } from "./ai.js";
 
 const canvas = document.getElementById("game");
 const g = canvas.getContext("2d");
@@ -22,14 +23,16 @@ fit();
 
 const START = [330, 630];
 const P1 = makeFighter("p1", START[0], PAL.white, 1);
-const P2 = makeFighter("p2", START[1], PAL.blue, -1); // practice opponent
+const P2 = makeFighter("p2", START[1], PAL.blue, -1); // computer opponent (or practice dummy)
 let paused = false, slow = params.has("slow"), showRig = params.has("rig");
 let freeze = 0, shake = 0, camX = 0, camY = 0, zoom = 0, zoomAt = [W / 2, H / 2];
 let koT = -1, koSlow = 0, lastAttacker = P1;
 
-// --- practice opponent ---
-const MODES = ["Stand", "Block", "Crouch", "Jump"];
-let mode = Math.max(0, MODES.indexOf(params.get("mode") || "Stand"));
+// --- opponent: "Fight" is the computer opponent; the rest are practice-dummy behaviours ---
+const MODES = ["Fight", "Stand", "Block", "Crouch", "Jump"];
+let mode = Math.max(0, MODES.indexOf(params.get("mode") || "Fight"));
+const AI1 = params.has("demo") ? makeAI(LEVEL_NAMES.includes(params.get("demo")) ? params.get("demo") : "Normal") : null; // ?demo: the computer plays both sides
+const AI = makeAI(LEVEL_NAMES.includes(params.get("level")) ? params.get("level") : "Normal");
 P2.nextJump = 0;
 function dummyIntent(f) {
   const it = { dir: 0, speed: 0.55, crouch: false, block: false };
@@ -60,19 +63,21 @@ function landHit(att, def) {
 
 function resetRound() {
   resetFighter(P1, START[0], 1); resetFighter(P2, START[1], -1);
-  P2.homing = false; koT = -1; clearFx();
+  P2.homing = false; koT = -1; clearFx(); resetAI(AI); if (AI1) resetAI(AI1);
 }
 
 function step(dt) {
   time.wt += dt;
   if (koT >= 0 && (koT += dt) > 3.2) resetRound();
-  if (take("KeyT")) mode = (mode + 1) % MODES.length;
+  if (take("KeyT")) { mode = (mode + 1) % MODES.length; P2.homing = false; resetAI(AI); }
+  LEVEL_NAMES.forEach((n, i) => { if (take("Digit" + (i + 1))) { AI.level = n; mode = 0; } });
   if (freeze > 0) freeze -= dt;
   else {
     time.gt += dt;
-    const i1 = koT >= 0 ? { dir: 0, speed: 1 } : readP1();
+    const i1 = koT >= 0 ? { dir: 0, speed: 1 } : AI1 ? aiIntent(P1, P2, AI1) : readP1();
     updateFighter(P1, P2, dt, i1);
-    updateFighter(P2, P1, dt, dummyIntent(P2));
+    const i2 = koT >= 0 ? { dir: 0, speed: 1 } : MODES[mode] === "Fight" ? aiIntent(P2, P1, AI) : dummyIntent(P2);
+    updateFighter(P2, P1, dt, i2);
     resolveSpacing(P1, P2);
     finishFighter(P1, dt); finishFighter(P2, dt);
     landHit(P1, P2);
@@ -98,7 +103,7 @@ function render() {
   drawPetals(g);
   if (showRig) for (const f of order) drawRig(g, f);
   g.restore();
-  drawHud(g, P1, P2, { mode: MODES[mode], paused, slow, banner: koT >= 0.15 ? "K.O.!" : "" });
+  drawHud(g, P1, P2, { mode: MODES[mode], level: AI.level, paused, slow, banner: koT >= 0.15 ? "K.O.!" : "" });
 }
 
 let acc = 0, last = performance.now(), errShown = false;
@@ -127,4 +132,4 @@ canvas.focus();
 document.getElementById("nojs")?.remove();
 
 // Test hook for screenshot scripts.
-window.__kf = { P1, P2, time, step, reset: resetRound, setMode: (m) => { mode = MODES.indexOf(m); } };
+window.__kf = { P1, P2, AI, AI1, time, step, reset: resetRound, setMode: (m) => { mode = MODES.indexOf(m); } };

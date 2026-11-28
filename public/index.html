@@ -2,12 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#17121d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KungFu 2">
+<link rel="manifest" href="manifest.json">
 <title>KungFu 2</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="game" aria-label="KungFu 2"></canvas>
+<div id="turn" aria-live="polite"><div class="phone"></div><p>Turn your phone sideways to play</p></div>
 <p id="nojs">The game didn't start. If you opened this file directly, open it through a web server instead (see PLAN.md).</p>
 <script type="module" src="src/main.js"></script>
 </body>

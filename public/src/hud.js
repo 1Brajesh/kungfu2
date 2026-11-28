@@ -82,13 +82,14 @@ export function drawHud(g, p1, p2, info) {
   } else if (info.scene === "practice") label(g, info.mode === "CPU" ? "PRACTICE" : `Opponent: ${info.mode}`, W / 2, y + 9, "center", 13);
 
   if (info.banner) drawBanner(g, info.banner);
-  const tag = !document.hasFocus() ? "CLICK TO PLAY" : info.slow ? "SLOW MOTION" : "";
+  const tag = !document.hasFocus() && !info.touch ? "CLICK TO PLAY" : info.slow ? "SLOW MOTION" : "";
   if (tag) {
     g.font = BIG; g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
     g.lineWidth = 5; g.strokeStyle = OUT; g.strokeText(tag, W / 2, 100);
     g.fillStyle = "#ffd93b"; g.fillText(tag, W / 2, 100);
   }
 
+  if (info.touch) return; // the on-screen buttons replace the key reminders
   if (info.scene === "practice") footer(g, `T opponent (${info.mode})    1 2 3 CPU level    B stage (${info.stage})    Esc menu`, H - 47);
   footer(g, "A/D walk   W jump   S crouch   J punch (×3 combo)   K kick   L heavy   S+K sweep   I block   U roll   in air: J / K", H - 21);
 }

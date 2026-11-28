@@ -29,6 +29,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | `input.js` | Keyboard |
 | `hud.js` | Health bars, guard meters, banners, the controls line |
 | `menu.js` | Title, pause and match-over menus (keys, mouse and touch), the logo, the controls card |
+| `touch.js` | On-screen controls for phones: floating stick, five buttons, pause; they press the same keys as the keyboard |
 | `ai.js` | The computer opponent: sees you a moment late, spaces, attacks, blocks, ducks, jumps and punishes misses |
 | `main.js` | The game loop, the screens (title, match, practice), rounds and timer, hit-freeze, shake and zoom, K.O. |
 
@@ -60,7 +61,7 @@ It is separate from the original KungFu (kungfu.brajesh.com, sprite sheets) and 
 | Skeleton view | ` (backquote) |
 | Slow motion | O |
 
-URL options for testing: `?rig` (skeleton on), `?slow`, `?fight` (skip the title, straight into a match), `?mode=Block` (straight into practice; Stand, Block, Crouch, Jump or CPU), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
+URL options for testing: `?touch` (show the touch controls on a computer), `?rig` (skeleton on), `?slow`, `?fight` (skip the title, straight into a match), `?mode=Block` (straight into practice; Stand, Block, Crouch, Jump or CPU), `?level=Hard`, `?demo` or `?demo=Hard` (the computer plays both sides), `?stage=bamboo` or `?stage=rooftop`.
 
 ### Fighting rules (step 2)
 - Health 100. Jab 6, cross 8, uppercut 12, kick 10, sweep 8, flying kick 14, down smash 16, heavy kick 20.
@@ -99,12 +100,21 @@ Each stage draws a background and a foreground, moves its own scenery, reacts to
 - **Practice:** no timer or rounds; a K.O. starts again. T, 1/2/3 and B work here only.
 - **Pause** (Esc or P in a match or practice): Resume, Restart, Main menu.
 
+### Touch controls (phones and tablets)
+- They appear the first time the screen is touched, and go away again if a real keyboard is used. A mouse never turns them on.
+- **Left half of the screen** (including the dark bars beside the game): a floating stick that starts wherever the thumb lands. Left/right walk, up jumps (up-left/up-right jump that way), down crouches. Down + KICK is the sweep.
+- **Bottom right:** PUNCH (tap again for the combo), KICK, HEAVY, BLOCK (hold) and ROLL. A finger can slide from one button to another. In the air PUNCH and KICK do the down smash and flying kick. Android phones give a tiny buzz on each press.
+- **Pause** button under the timer. In practice, the pause menu also has Opponent, CPU level and Stage, since there are no T, 1/2/3 or B keys.
+- Held upright, the phone shows "Turn your phone sideways to play" and a match pauses. On Android the game goes full screen and locks to landscape on the first touch; on iPhone, Add to Home Screen gives full screen.
+- Touches become the same key presses as the keyboard (`touchPress`/`touchHold` in `input.js`), so the fighting code and menus don't know the difference.
+
 ## Steps
 1. **Rig and first moves** (done): one fighter you control, plus a practice opponent who stands, reacts to hits and walks back to their spot. Idle with breathing, walking forward and back, a punch with hit-freeze, a POW star and shake.
 2. **All the moves** (done), with limbs as the hit points: two punches, kick, heavy kick, low kick, crouch, block, dodge roll, jump and flying kick, combo, down smash. Health bars and the guard meter (blocking wears it down until it breaks), knockdown and getting up.
 3. **Effects** (done): streaks on every strike, a bigger freeze, zoom and shake on heavies, dust from steps and landings, slow motion on the final hit.
 4. **Living backgrounds** (done): temple courtyard, bamboo forest, rooftop at night, each with moving parts.
-5. **The computer opponent** (done, brought forward), **rounds and menus** (done), then **touch controls for phones** ← *next*.
+5. **The computer opponent**, **rounds and menus** and **touch controls for phones** (all done).
+   *Next: step 6, more fighters.*
 6. **More fighters** (2–4): their own outfits, hair, faces, sizes and a signature move each.
 7. **Online play** through the original game's relay design.
 

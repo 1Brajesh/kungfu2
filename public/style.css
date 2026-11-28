@@ -1,5 +1,12 @@
-html, body { margin: 0; height: 100%; background: #17121d; overflow: hidden; }
+html, body { margin: 0; height: 100%; background: #17121d; overflow: hidden; overscroll-behavior: none; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 body { display: flex; align-items: center; justify-content: center; }
 canvas { display: block; background: #000; touch-action: none; }
 canvas:focus { outline: none; }
 #nojs { position: fixed; left: 16px; right: 16px; top: 40%; margin: 0; text-align: center; color: #fff8ec; font: 16px/1.5 system-ui, sans-serif; }
+/* A phone held upright: ask for landscape (the game also pauses). */
+#turn { display: none; position: fixed; inset: 0; background: #17121d; color: #ffd93b; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+  font: 900 24px/1.3 "Arial Black", Impact, system-ui, sans-serif; text-align: center; padding: 24px; }
+#turn .phone { width: 56px; height: 100px; border: 6px solid #fff8ec; border-radius: 12px; background: #2f2a66; animation: tilt 2s ease-in-out infinite; }
+@keyframes tilt { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (pointer: coarse) { #turn { display: flex; } }

@@ -1,0 +1,9 @@
+{
+  "name": "KungFu 2",
+  "short_name": "KungFu 2",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#17121d",
+  "theme_color": "#17121d"
+}

@@ -12,6 +12,7 @@ import { spawnHit, updateFx, drawFx, drawTrail, drawDust, drawFlash, fighterEven
 import { hudTick, drawHud } from "./hud.js";
 import { makeAI, resetAI, aiIntent, LEVEL_NAMES } from "./ai.js";
 import { makeMenu, menuKeys, menuPointer, drawMenu, drawLogo, drawControls, dim, drawText } from "./menu.js";
+import { touch, initTouch, drawTouch, resetTouch, isPortrait } from "./touch.js";
 
 const canvas = document.getElementById("game");
 const g = canvas.getContext("2d");
@@ -101,7 +102,7 @@ function startPractice() {
   resetFighters();
 }
 function goTitle() {
-  scene = "title"; clearPressed(); showControls = false;
+  scene = "title"; clearPressed(); resetTouch(); showControls = false;
   setStage(stageIndex(settings.stage));
   resetFighters();
   menu = titleMenu();
@@ -120,11 +121,20 @@ function titleMenu() {
     { label: "CONTROLS", action: "controls" },
   ], { kind: "title" });
 }
-const pauseMenu = () => makeMenu([
-  { label: "RESUME", action: "resume" },
-  { label: scene === "match" ? "RESTART MATCH" : "RESET", action: "restart" },
-  { label: "MAIN MENU", action: "title" },
-], { kind: "pause" });
+function pauseMenu() {
+  const items = [
+    { label: "RESUME", action: "resume" },
+    { label: scene === "match" ? "RESTART MATCH" : "RESET", action: "restart" },
+    { label: "MAIN MENU", action: "title" },
+  ];
+  // practice settings live here too, so they can be changed without a keyboard
+  if (scene === "practice") items.splice(1, 0,
+    { label: "OPPONENT", values: MODES, index: mode, onChange: (i) => { mode = i; P2.homing = false; resetAI(AI); } },
+    { label: "CPU LEVEL", values: LEVEL_NAMES, index: LEVEL_NAMES.indexOf(AI.level), onChange: (i) => { AI.level = LEVEL_NAMES[i]; } },
+    { label: "STAGE", values: STAGES.map((st) => st.name), index: stageI, onChange: (i) => setStage(i) });
+  return makeMenu(items, { kind: "pause" });
+}
+function openPause() { menu = pauseMenu(); clearPressed(); resetTouch(); }
 const overMenu = () => makeMenu([{ label: "REMATCH", action: "fight" }, { label: "MAIN MENU", action: "title" }], { kind: "over" });
 
 function doAction(a) {
@@ -189,7 +199,7 @@ function stepMatch(dt) {
     // the winner celebrates once things have settled
     if (match.t > (match.why === "ko" ? 1.6 : 1.2)) celebrate(match.winner);
     if (match.t > (match.why === "ko" ? 3.6 : 3.0)) {
-      if (match.wins.some((n) => n >= WINS_NEEDED)) { match.phase = "over"; match.t = 0; menu = overMenu(); clearPressed(); }
+      if (match.wins.some((n) => n >= WINS_NEEDED)) { match.phase = "over"; match.t = 0; menu = overMenu(); clearPressed(); resetTouch(); }
       else { match.round++; startRound(); }
     }
   } else if (match.phase === "over") celebrate(match.winner);
@@ -284,12 +294,13 @@ function render() {
   }
   drawHud(g, P1, P2, {
     scene, mode: MODES[mode], level: AI.level, stage: stage.name, slow, banner: banner(),
-    timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null,
+    timer: scene === "match" ? Math.ceil(match.timer) : null, wins: scene === "match" ? match.wins : null, touch: touch.on,
   });
   if (menu) {
-    if (menu.kind === "pause") { dim(g, 0.5); drawText(g, "PAUSED", W / 2, 150, 44, "#ffd93b", "center", 10); }
-    drawMenu(g, menu, W / 2, menu.kind === "over" ? 300 : 210, time.wt);
-  }
+    const top = menu.kind === "pause" ? Math.max(150, 300 - menu.items.length * 30) : 300;
+    if (menu.kind === "pause") { dim(g, 0.5); drawText(g, "PAUSED", W / 2, top - 55, 44, "#ffd93b", "center", 10); }
+    drawMenu(g, menu, W / 2, top, time.wt);
+  } else if (!showControls && (scene === "match" || scene === "practice")) drawTouch(g);
 }
 
 // --- the loop ---
@@ -305,7 +316,7 @@ function frame(now) {
     else if (menu) {
       if (menu.kind === "pause" && take("Escape", "KeyP")) doAction("resume");
       else doAction(menuKeys(menu));
-    } else if ((scene === "match" || scene === "practice") && take("Escape", "KeyP")) { menu = pauseMenu(); clearPressed(); }
+    } else if ((scene === "match" || scene === "practice") && (take("Escape", "KeyP") || isPortrait())) openPause();
     if (paused()) fdt = 0;
     if (koSlow > 0 && freeze <= 0) {
       // after the impact freeze: very slow at first, easing back to full speed
@@ -332,6 +343,7 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 canvas.focus();
 document.getElementById("nojs")?.remove();
+initTouch(canvas, { active: () => !menu && !showControls && (scene === "match" || scene === "practice"), onPause: openPause });
 
 // Where to start. ?demo: computer vs computer; ?mode=Block (or Stand, Crouch, Jump, CPU): practice; ?fight: straight into a match.
 if (params.has("demo")) {

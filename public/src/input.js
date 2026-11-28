@@ -1,6 +1,7 @@
 // Keyboard state: held keys plus presses waiting to be read by the next game update.
 const held = new Set();
 const pressed = new Set();
+const touchHeld = new Set(); // keys held by on-screen touch controls
 const GAME_KEYS = new Set(["Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Backquote"]);
 
 /** Physical key code, falling back to the typed character when a browser leaves `code` empty. */
@@ -20,9 +21,14 @@ addEventListener("keydown", (e) => {
   held.add(c);
 });
 addEventListener("keyup", (e) => held.delete(codeOf(e)));
-addEventListener("blur", () => held.clear());
+addEventListener("blur", () => { held.clear(); touchHeld.clear(); });
 
-export const isDown = (...codes) => codes.some((c) => held.has(c));
+export const isDown = (...codes) => codes.some((c) => held.has(c) || touchHeld.has(c));
+
+/** On-screen touch controls act as keys: a press, and holding a key down. */
+export function touchPress(code) { pressed.add(code); }
+export function touchHold(code, on) { if (on) touchHeld.add(code); else touchHeld.delete(code); }
+export function touchRelease() { touchHeld.clear(); }
 
 /** Forgets presses nobody has read yet (when switching between menus and play). */
 export function clearPressed() { pressed.clear(); }
